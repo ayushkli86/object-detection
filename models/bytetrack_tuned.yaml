@@ -1,0 +1,11 @@
+# ByteTrack — Tuned for ScreenDetect
+# Lightweight fallback if BoT-SORT ReID is too heavy
+# IoU-only matching but with better thresholds
+
+tracker_type: bytetrack
+track_high_thresh: 0.35      # Cleaner initial tracks (was 0.25)
+track_low_thresh: 0.1        # Recovery of briefly lost objects
+new_track_thresh: 0.4        # Fewer false new tracks (was 0.25)
+track_buffer: 60             # 2s at 30fps — handles objects leaving frame (was 30)
+match_thresh: 0.7            # Stricter = fewer ID swaps (was 0.8)
+fuse_score: True

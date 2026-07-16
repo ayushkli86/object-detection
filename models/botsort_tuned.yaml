@@ -1,0 +1,20 @@
+# BoT-SORT — Tuned for ScreenDetect
+# Uses appearance features (ReID) + motion for accurate ID tracking
+# Key change: with_reid=True enables appearance-based re-identification
+
+tracker_type: botsort
+track_high_thresh: 0.3       # Higher = cleaner initial tracks (was 0.25)
+track_low_thresh: 0.1        # Keep low for recovery of briefly lost objects
+new_track_thresh: 0.35       # Higher = fewer false new tracks (was 0.25)
+track_buffer: 60             # 2s at 30fps — handles objects leaving frame briefly (was 30)
+match_thresh: 0.7            # Stricter matching = fewer ID swaps (was 0.8)
+fuse_score: True
+
+# GMC helps with camera/screen movement
+gmc_method: sparseOptFlow
+
+# ReID — appearance-based re-identification
+with_reid: True              # ENABLE appearance matching (was False)
+proximity_thresh: 0.5        # Min IoU to consider for ReID matching
+appearance_thresh: 0.8       # Min appearance similarity; raise if IDs still swap
+model: auto                  # Use YOLO's own features as ReID backbone
