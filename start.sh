@@ -68,8 +68,8 @@ trap cleanup INT TERM
 # ── Banner ──────────────────────────────────────────────────────────────
 echo -e "${C}"
 echo "  ╔══════════════════════════════════════════════════╗"
-echo "  ║         ScreenDetect — YOLOv8 Camera            ║"
-echo "  ║   Real-Time Object Detection via Webcam         ║"
+echo "  ║         Object Detection — YOLOv8               ║"
+echo "  ║   Real-Time Detection via Webcam/Screen         ║"
 echo "  ╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 

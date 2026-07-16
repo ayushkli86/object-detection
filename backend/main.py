@@ -1,6 +1,6 @@
 """
-Screen Object Detector - Backend Server
-FastAPI + WebSocket server for real-time YOLOv8 screen object detection.
+Object Detection - Backend Server
+FastAPI + WebSocket server for real-time YOLOv8 screen/camera object detection.
 
 Architecture:
   - WebSocket `/ws` streams detection frames (JPEG + detection data)
@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Screen Object Detector",
+    title="Object Detection",
     version="1.0.0",
     lifespan=lifespan,
 )

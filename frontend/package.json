@@ -1,5 +1,5 @@
 {
-  "name": "screen-object-detector",
+  "name": "object-detection",
   "private": true,
   "version": "1.0.0",
   "type": "module",

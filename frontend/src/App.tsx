@@ -4,6 +4,10 @@ import DetectionView from './components/DetectionView';
 import ObjectCounter from './components/ObjectCounter';
 import ControlPanel from './components/ControlPanel';
 import StatsDashboard from './components/StatsDashboard';
+import CongestionBadge from './components/CongestionBadge';
+import CategoryBreakdown from './components/CategoryBreakdown';
+import TrendChart from './components/TrendChart';
+import TrackerInfoPanel from './components/TrackerInfoPanel';
 import './App.css';
 
 const App: React.FC = () => {
@@ -171,9 +175,9 @@ const App: React.FC = () => {
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
               <circle cx="12" cy="13" r="4" />
             </svg>
-            <h1>ScreenDetect</h1>
+            <h1>Object Detection</h1>
           </div>
-          <span className="header-subtitle">YOLOv8 Real-Time Traffic Detection</span>
+          <span className="header-subtitle">YOLOv8 Real-Time Detection</span>
         </div>
         <div className="header-right">
           <div className={`connection-badge ${connected ? 'online' : 'offline'}`}>
@@ -198,7 +202,8 @@ const App: React.FC = () => {
             currentConf={0.35}
             currentFps={15}
           />
-          <StatsDashboard detectionData={detectionData} fetchStats={fetchStats} />
+          <CongestionBadge detectionData={detectionData} />
+          <CategoryBreakdown detectionData={detectionData} />
         </aside>
 
         {/* Center: live camera / annotated detection */}
@@ -209,17 +214,20 @@ const App: React.FC = () => {
             detecting={detecting}
             detectionData={detectionData}
           />
+          <TrendChart detectionData={detectionData} />
         </main>
 
         {/* Right sidebar */}
         <aside className="sidebar sidebar-right">
+          <StatsDashboard detectionData={detectionData} fetchStats={fetchStats} />
+          <TrackerInfoPanel fetchStats={fetchStats} />
           <ObjectCounter detectionData={detectionData} />
         </aside>
       </div>
 
       {/* Footer */}
       <footer className="app-footer">
-        <span>Powered by YOLOv8n · Traffic Object Detection · 12 Classes</span>
+        <span>Powered by YOLOv8n · Object Detection · 80 COCO Classes</span>
         <span className="footer-sep">|</span>
         <span>
           Camera capture at {detectionData?.fps.toFixed(1) ?? '—'} FPS

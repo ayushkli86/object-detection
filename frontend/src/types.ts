@@ -4,7 +4,7 @@ export interface Detection {
   class_name: string;
   confidence: number;
   bbox: [number, number, number, number]; // [x1, y1, x2, y2] normalized 0-1
-  tracker_id: number | null; // Persistent unique ID from ByteTrack
+  tracker_id: number | null; // Persistent unique ID from tracker
 }
 
 /** Frame detection data from backend */
@@ -37,4 +37,15 @@ export interface DetectorStats {
   conf_threshold: number;
   iou_threshold: number;
   device: string;
+  tracker: string;
+  tracker_config: string;
+  total_tracks_created: number;
+  total_id_switches: number;
+  tracking_stability: number; // 0-1, 1.0 = perfect
 }
+
+/** Congestion level */
+export type CongestionLevel = 'low' | 'medium' | 'high' | 'severe';
+
+/** Vehicle category */
+export type VehicleCategory = 'private' | 'public' | 'non-motorized' | 'other';

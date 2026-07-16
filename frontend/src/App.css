@@ -561,7 +561,8 @@ body {
 /* --- Main Content (Detection View) --- */
 .main-content {
   display: flex;
-  align-items: stretch;
+  flex-direction: column;
+  gap: 12px;
   min-height: 0;
 }
 
@@ -1025,4 +1026,368 @@ body {
   color: var(--accent-cyan);
   opacity: 0.7;
   white-space: nowrap;
+}
+
+/* ===================================================================
+   Congestion Badge
+   =================================================================== */
+
+.congestion-badge {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid;
+  box-shadow: var(--shadow);
+}
+
+.congestion-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.congestion-icon {
+  font-size: 0.9rem;
+  letter-spacing: -1px;
+}
+
+.congestion-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.congestion-count {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.congestion-number {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.congestion-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.congestion-bar-track {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.congestion-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease, background-color 0.4s ease;
+}
+
+.congestion-alert {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent-orange);
+  padding-top: 4px;
+}
+
+.congestion-alert-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  animation: pulse-dot 1s infinite;
+}
+
+/* ===================================================================
+   Category Breakdown
+   =================================================================== */
+
+.category-breakdown {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.category-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.category-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+
+.category-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.category-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.category-pct {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.75rem;
+  min-width: 32px;
+  text-align: right;
+}
+
+.category-count {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 28px;
+  text-align: right;
+}
+
+.category-bar-track {
+  width: 100%;
+  height: 3px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.category-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.category-classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.category-class-chip {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+/* ===================================================================
+   Trend Chart
+   =================================================================== */
+
+.trend-chart {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.trend-badge {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.trend-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.trend-stat {
+  text-align: center;
+}
+
+.trend-stat-value {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.trend-stat-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.trend-svg-container {
+  width: 100%;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.trend-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.trend-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* ===================================================================
+   Tracker Info Panel
+   =================================================================== */
+
+.tracker-info {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.tracker-type-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tracker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tracker-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* Stability meter */
+.tracker-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tracker-meter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tracker-meter-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.tracker-meter-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.tracker-meter-track {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.tracker-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease, background-color 0.5s ease;
+}
+
+/* Stats grid */
+.tracker-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.tracker-stat {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  text-align: center;
+}
+
+.tracker-stat-value {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.tracker-stat-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Device */
+.tracker-device {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+}
+
+.tracker-device-label {
+  color: var(--text-muted);
+}
+
+.tracker-device-value {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
 }
