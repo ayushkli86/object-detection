@@ -5,11 +5,11 @@ interface Props {
   detectionData: DetectionData | null;
 }
 
-const LEVELS: { level: CongestionLevel; label: string; color: string; bg: string; icon: string; max: number }[] = [
-  { level: 'low',      label: 'Low',      color: '#22c55e', bg: 'rgba(34,197,94,0.12)',  icon: '●', max: 15 },
-  { level: 'medium',   label: 'Medium',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: '●●', max: 35 },
-  { level: 'high',     label: 'High',     color: '#f97316', bg: 'rgba(249,115,22,0.12)', icon: '●●●', max: 60 },
-  { level: 'severe',   label: 'Severe',   color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  icon: '●●●●', max: Infinity },
+const LEVELS: { level: CongestionLevel; label: string; color: string; icon: string; max: number }[] = [
+  { level: 'low',      label: 'Low',      color: '#22c55e', icon: '●', max: 15 },
+  { level: 'medium',   label: 'Medium',   color: '#f59e0b', icon: '●●', max: 35 },
+  { level: 'high',     label: 'High',     color: '#f97316', icon: '●●●', max: 60 },
+  { level: 'severe',   label: 'Severe',   color: '#ef4444', icon: '●●●●', max: Infinity },
 ];
 
 function getClassify(count: number): typeof LEVELS[number] {

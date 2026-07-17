@@ -38,7 +38,6 @@ export interface DetectorStats {
   iou_threshold: number;
   device: string;
   tracker: string;
-  tracker_config: string;
   total_tracks_created: number;
   total_id_switches: number;
   tracking_stability: number; // 0-1, 1.0 = perfect

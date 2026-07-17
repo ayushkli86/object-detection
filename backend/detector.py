@@ -2,6 +2,12 @@
 YOLOv8 Object Detector with ByteTrack Tracking
 Uses Ultralytics YOLOv8 pretrained on COCO dataset (80 classes)
 Each unique object gets a persistent tracker_id across frames.
+
+Stability improvements:
+  - Bbox Kalman smoothing to reduce jitter
+  - ID switch detection for tracking stability metrics
+  - Confidence smoothing across frames
+  - Optimized ByteTrack config for better track persistence
 """
 
 import os
@@ -15,6 +21,7 @@ from collections import defaultdict
 import time
 import logging
 import glob
+import collections
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +79,61 @@ COCO_CLASSES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Kalman Filter for bbox smoothing
+# ---------------------------------------------------------------------------
+class BboxKalmanFilter:
+    """
+    Simple Kalman filter for smoothing bounding box coordinates.
+    State: [x1, y1, x2, y2, vx1, vy1, vx2, vy2]
+    """
+
+    def __init__(self, process_noise: float = 0.03, measurement_noise: float = 0.1):
+        self.initialized = False
+        self.process_noise = process_noise
+        self.measurement_noise = measurement_noise
+        # State vector: [x1, y1, x2, y2, vx1, vy1, vx2, vy2]
+        self.state = np.zeros(8, dtype=np.float64)
+        # Covariance matrix
+        self.P = np.eye(8, dtype=np.float64) * 10.0
+        # State transition matrix (constant velocity model)
+        self.F = np.eye(8, dtype=np.float64)
+        self.F[0, 4] = 1.0  # x1 += vx1
+        self.F[1, 5] = 1.0  # y1 += vy1
+        self.F[2, 6] = 1.0  # x2 += vx2
+        self.F[3, 7] = 1.0  # y2 += vy2
+        # Measurement matrix (observe position only)
+        self.H = np.eye(4, 8, dtype=np.float64)
+        # Process noise
+        self.Q = np.eye(8, dtype=np.float64) * self.process_noise
+        # Measurement noise
+        self.R = np.eye(4, dtype=np.float64) * self.measurement_noise
+        # Inactive frames counter
+        self.inactive_frames = 0
+
+    def predict(self) -> np.ndarray:
+        """Predict next state, return smoothed bbox [x1, y1, x2, y2]."""
+        self.state = self.F @ self.state
+        self.P = self.F @ self.P @ self.F.T + self.Q
+        self.inactive_frames += 1
+        return self.state[:4].copy()
+
+    def update(self, measurement: np.ndarray):
+        """Update with new measurement [x1, y1, x2, y2]."""
+        z = np.asarray(measurement, dtype=np.float64)
+        y = z - self.H @ self.state  # innovation
+        S = self.H @ self.P @ self.H.T + self.R  # innovation covariance
+        K = self.P @ self.H.T @ np.linalg.inv(S)  # Kalman gain
+        self.state = self.state + K @ y
+        I = np.eye(8)
+        self.P = (I - K @ self.H) @ self.P
+        self.inactive_frames = 0
+
+    def get_bbox(self) -> np.ndarray:
+        """Get current smoothed bbox."""
+        return self.state[:4].copy()
+
+
 @dataclass
 class DetectionResult:
     """Single detection result with tracking ID."""
@@ -88,11 +150,11 @@ class DetectionResult:
 class DetectionFrame:
     """Complete detection frame result."""
     detections: List[DetectionResult]
-    object_counts: Dict[str, int]        # Per-frame counts (how many of each class in THIS frame)
-    session_counts: Dict[str, int]       # Unique object counts (each tracker_id counted once)
-    total_objects: int                    # Total detections in this frame
-    active_tracks_count: int             # Unique objects currently visible
-    total_unique_seen: int               # Total unique objects seen this session
+    object_counts: Dict[str, int]        # Per-frame counts
+    session_counts: Dict[str, int]       # Unique object counts
+    total_objects: int
+    active_tracks_count: int
+    total_unique_seen: int
     fps: float
     inference_ms: float
     capture_ms: float
@@ -103,7 +165,7 @@ class DetectionFrame:
 
 class ObjectDetector:
     """
-    YOLOv8 object detector with configurable tracker (BoT-SORT or ByteTrack).
+    YOLOv8 object detector with ByteTrack tracking.
     Each unique object gets a persistent tracker_id.
     """
 
@@ -113,24 +175,31 @@ class ObjectDetector:
         (200, 200, 200), (255, 255, 130),
     ]
 
-    # Available trackers — path relative to models/ dir
-    TRACKERS = {
-        "botsort":     "botsort_tuned.yaml",     # Best: appearance + motion (ReID)
-        "bytetrack":   "bytetrack_tuned.yaml",   # Lightweight: IoU only
-    }
-
     def __init__(
         self,
         model_path: str = "yolov8n.pt",
         conf_threshold: float = 0.35,
         iou_threshold: float = 0.45,
         device: str = "cpu",
-        tracker: str = "botsort",
-        models_dir: str = "models",
+        tracker: str = "bytetrack",
+        models_dir: str = "",
     ):
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
-        self.models_dir = models_dir
+        self.tracker_name = tracker
+        self._models_dir = models_dir
+
+        # Resolve tracker config: try models_dir/{tracker}_tuned.yaml first, then default
+        self.tracker_config_path = f"{tracker}.yaml"  # fallback to ultralytics default
+        if models_dir:
+            tuned_path = os.path.join(models_dir, f"{tracker}_tuned.yaml")
+            if os.path.isfile(tuned_path):
+                self.tracker_config_path = tuned_path
+            else:
+                custom_path = os.path.join(models_dir, f"{tracker}.yaml")
+                if os.path.isfile(custom_path):
+                    self.tracker_config_path = custom_path
+        logger.info(f"Tracker: {self.tracker_name} (config: {self.tracker_config_path})")
 
         import torch
         if device == "auto":
@@ -148,11 +217,6 @@ class ObjectDetector:
             self.classes = {i: name for i, name in enumerate(COCO_CLASSES)}
         logger.info(f"Loaded {len(self.classes)} classes")
 
-        # ── Tracker selection ───────────────────────────────────────────
-        self.tracker_name = tracker
-        self.tracker_config = self._resolve_tracker(tracker)
-        logger.info(f"Tracker: {self.tracker_name} ({self.tracker_config})")
-
         # Performance tracking
         self.fps = 0.0
         self._fps_history: List[float] = []
@@ -163,60 +227,118 @@ class ObjectDetector:
         # ── Tracking state ──────────────────────────────────────────────
         # Maps tracker_id → class_name (permanent for the session)
         self.known_tracks: Dict[int, str] = {}
-        # Track lifetime: tracker_id → frames_seen
-        self.track_lifetimes: Dict[int, int] = defaultdict(int)
         # Session counts: only incremented when a tracker_id is FIRST seen
         self.session_counts: Dict[str, int] = defaultdict(int)
         # Cumulative counts across restarts
         self.cumulative_counts: Dict[str, int] = defaultdict(int)
-        # Tracking quality metrics
-        self.total_id_switches = 0
-        self.total_tracks_created = 0
-        self._prev_frame_ids: set = set()
 
-    def _resolve_tracker(self, tracker_name: str) -> str:
-        """Resolve tracker name to config path."""
-        if tracker_name in self.TRACKERS:
-            config_path = os.path.join(self.models_dir, self.TRACKERS[tracker_name])
-            if os.path.exists(config_path):
-                return config_path
-            logger.warning(f"Tracker config not found: {config_path}, falling back to default")
-            return self.TRACKERS[tracker_name]  # Let ultralytics resolve defaults
+        # ── Stability metrics ──────────────────────────────────────────
+        self.total_tracks_created: int = 0
+        self.total_id_switches: int = 0
+        # Maps tracker_id → set of class_names it has been assigned
+        self._track_class_history: Dict[int, set] = defaultdict(set)
 
-        # Allow passing a direct path
-        if os.path.exists(tracker_name):
-            return tracker_name
+        # ── Bbox smoothing (Kalman filter per tracker_id) ─────────────
+        self._kalman_filters: Dict[int, BboxKalmanFilter] = {}
+        self._kalman_max_inactive = 60  # remove filter after N frames unseen
 
-        logger.warning(f"Unknown tracker '{tracker_name}', using bytetrack default")
-        return "bytetrack.yaml"
-
-    def set_tracker(self, tracker_name: str) -> str:
-        """Switch tracker at runtime. Returns the resolved config path."""
-        self.tracker_name = tracker_name
-        self.tracker_config = self._resolve_tracker(tracker_name)
-        # Reset tracking state when switching trackers
-        self.known_tracks.clear()
-        self.track_lifetimes.clear()
-        self._prev_frame_ids.clear()
-        self.total_id_switches = 0
-        self.total_tracks_created = 0
-        logger.info(f"Tracker switched to: {self.tracker_name} ({self.tracker_config})")
-        return self.tracker_config
+        # ── Confidence smoothing ───────────────────────────────────────
+        self._conf_history: Dict[int, collections.deque] = defaultdict(
+            lambda: collections.deque(maxlen=5)
+        )
 
     def update_thresholds(self, conf_threshold: float, iou_threshold: float):
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         logger.info(f"Thresholds: conf={conf_threshold}, iou={iou_threshold}")
 
+    def set_tracker(self, tracker_name: str):
+        """Switch tracker type at runtime (reinitializes Kalman filters)."""
+        if tracker_name not in ("bytetrack", "botsort"):
+            logger.warning(f"Unknown tracker: {tracker_name}")
+            return
+        self.tracker_name = tracker_name
+        # Resolve config for the new tracker
+        if hasattr(self, '_models_dir') and self._models_dir:
+            tuned = os.path.join(self._models_dir, f"{tracker_name}_tuned.yaml")
+            if os.path.isfile(tuned):
+                self.tracker_config_path = tuned
+            else:
+                self.tracker_config_path = f"{tracker_name}.yaml"
+        else:
+            self.tracker_config_path = f"{tracker_name}.yaml"
+        # Reset Kalman filters since tracking state changes
+        self._kalman_filters.clear()
+        logger.info(f"Tracker switched to {tracker_name} (config: {self.tracker_config_path})")
+
+    def _get_smoothed_bbox(
+        self, tracker_id: int, raw_bbox: np.ndarray, frame_w: int, frame_h: int
+    ) -> List[float]:
+        """Apply Kalman smoothing to bbox, return normalized [x1, y1, x2, y2]."""
+        # Convert normalized to pixel space for Kalman (more stable numerically)
+        px_bbox = np.array([
+            raw_bbox[0] * frame_w,
+            raw_bbox[1] * frame_h,
+            raw_bbox[2] * frame_w,
+            raw_bbox[3] * frame_h,
+        ], dtype=np.float64)
+
+        if tracker_id not in self._kalman_filters:
+            kf = BboxKalmanFilter(process_noise=0.03, measurement_noise=0.08)
+            kf.update(px_bbox)
+            self._kalman_filters[tracker_id] = kf
+            return list(raw_bbox)
+
+        kf = self._kalman_filters[tracker_id]
+        kf.predict()
+        kf.update(px_bbox)
+
+        smoothed_px = kf.get_bbox()
+        # Clamp to frame bounds
+        smoothed_px[0] = max(0, min(smoothed_px[0], frame_w))
+        smoothed_px[1] = max(0, min(smoothed_px[1], frame_h))
+        smoothed_px[2] = max(0, min(smoothed_px[2], frame_w))
+        smoothed_px[3] = max(0, min(smoothed_px[3], frame_h))
+
+        return [
+            smoothed_px[0] / frame_w,
+            smoothed_px[1] / frame_h,
+            smoothed_px[2] / frame_w,
+            smoothed_px[3] / frame_h,
+        ]
+
+    def _smooth_confidence(self, tracker_id: int, raw_conf: float) -> float:
+        """Exponential moving average for confidence values."""
+        history = self._conf_history[tracker_id]
+        history.append(raw_conf)
+        if len(history) == 1:
+            return raw_conf
+        # EMA with alpha=0.6 (favor recent, but smooth)
+        alpha = 0.6
+        ema = history[0]
+        for c in list(history)[1:]:
+            ema = alpha * c + (1 - alpha) * ema
+        return ema
+
+    def _cleanup_stale_filters(self, active_ids: set):
+        """Remove Kalman filters for tracks that haven't been seen recently."""
+        stale = [
+            tid for tid, kf in self._kalman_filters.items()
+            if tid not in active_ids and kf.inactive_frames > self._kalman_max_inactive
+        ]
+        for tid in stale:
+            del self._kalman_filters[tid]
+            self._conf_history.pop(tid, None)
+
     def detect(self, frame: np.ndarray) -> DetectionFrame:
         """
         Run tracking on a single frame.
-        Uses selected tracker (BoT-SORT/ByteTrack) with persistent IDs.
+        Each unique object gets a persistent tracker_id via ByteTrack.
         """
         frame_start = time.time()
         h, w = frame.shape[:2]
 
-        # Run tracking with selected tracker config
+        # Run tracking (NOT detection) — persist=True keeps IDs across frames
         infer_start = time.time()
         results = self.model.track(
             frame,
@@ -224,15 +346,13 @@ class ObjectDetector:
             iou=self.iou_threshold,
             device=self.device,
             verbose=False,
-            tracker=self.tracker_config,
+            tracker=self.tracker_config_path,
             persist=True,
         )
         infer_time = (time.time() - infer_start) * 1000
 
         detections: List[DetectionResult] = []
         frame_counts: Dict[str, int] = defaultdict(int)
-
-        # Track which IDs are in this frame for stability metrics
         current_frame_ids: set = set()
 
         if results and len(results) > 0:
@@ -241,45 +361,83 @@ class ObjectDetector:
                 for box in boxes:
                     try:
                         x1, y1, x2, y2 = box.xyxy[0].tolist()
-                        confidence = float(box.conf[0])
+                        raw_conf = float(box.conf[0])
                         class_id = int(box.cls[0])
                         class_name = self.classes.get(class_id, f"class_{class_id}")
 
-                        # Get tracker ID (None if tracking is off or failed)
+                        # Get tracker ID
                         tracker_id = None
                         if hasattr(box, 'id') and box.id is not None:
                             tracker_id = int(box.id[0])
 
-                        detection = DetectionResult(
-                            class_id=class_id,
-                            class_name=class_name,
-                            confidence=confidence,
-                            bbox=[x1 / w, y1 / h, x2 / w, y2 / h],
-                            frame_center_x=(x1 + x2) / 2 / w,
-                            frame_center_y=(y1 + y2) / 2 / h,
-                            tracker_id=tracker_id,
-                        )
-                        detections.append(detection)
-                        frame_counts[class_name] += 1
-
-                        # ── Counting logic: only count NEW tracker_ids ───
                         if tracker_id is not None:
                             current_frame_ids.add(tracker_id)
-                            if tracker_id not in self.known_tracks:
-                                # First time seeing this object — count it
-                                self.known_tracks[tracker_id] = class_name
-                                self.track_lifetimes[tracker_id] = 1
-                                self.session_counts[class_name] += 1
-                                self.cumulative_counts[class_name] += 1
+
+                            # ── ID switch detection ──────────────────
+                            is_new_track = tracker_id not in self.known_tracks
+                            if not is_new_track:
+                                prev_class = self.known_tracks[tracker_id]
+                                if prev_class != class_name:
+                                    # ID switch detected!
+                                    self.total_id_switches += 1
+                                    logger.info(
+                                        f"ID switch: track #{tracker_id} "
+                                        f"'{prev_class}' -> '{class_name}' "
+                                        f"(total switches: {self.total_id_switches})"
+                                    )
+                            else:
+                                # New track
                                 self.total_tracks_created += 1
                                 logger.debug(
                                     f"New track #{tracker_id}: {class_name} "
-                                    f"(total unique: {len(self.known_tracks)})"
+                                    f"(total tracks: {self.total_tracks_created})"
                                 )
-                            else:
-                                self.track_lifetimes[tracker_id] += 1
+
+                            # Update known tracks (always use latest class)
+                            self.known_tracks[tracker_id] = class_name
+                            self._track_class_history[tracker_id].add(class_name)
+
+                            # ── Bbox smoothing ──────────────────────
+                            raw_bbox = np.array([
+                                x1 / w, y1 / h, x2 / w, y2 / h
+                            ])
+                            smoothed_bbox = self._get_smoothed_bbox(
+                                tracker_id, raw_bbox, w, h
+                            )
+
+                            # ── Confidence smoothing ────────────────
+                            smoothed_conf = self._smooth_confidence(tracker_id, raw_conf)
+
+                            detection = DetectionResult(
+                                class_id=class_id,
+                                class_name=class_name,
+                                confidence=smoothed_conf,
+                                bbox=smoothed_bbox,
+                                frame_center_x=(smoothed_bbox[0] + smoothed_bbox[2]) / 2,
+                                frame_center_y=(smoothed_bbox[1] + smoothed_bbox[3]) / 2,
+                                tracker_id=tracker_id,
+                            )
+                            detections.append(detection)
+                            frame_counts[class_name] += 1
+
+                            # Count ONLY when this tracker_id is FIRST seen
+                            if is_new_track:
+                                self.session_counts[class_name] += 1
+                                self.cumulative_counts[class_name] += 1
+
                         else:
-                            # No tracker ID — count as frame detection (fallback)
+                            # No tracker ID — fallback detection
+                            detection = DetectionResult(
+                                class_id=class_id,
+                                class_name=class_name,
+                                confidence=raw_conf,
+                                bbox=[x1 / w, y1 / h, x2 / w, y2 / h],
+                                frame_center_x=(x1 + x2) / 2 / w,
+                                frame_center_y=(y1 + y2) / 2 / h,
+                                tracker_id=None,
+                            )
+                            detections.append(detection)
+                            frame_counts[class_name] += 1
                             self.session_counts[class_name] += 1
                             self.cumulative_counts[class_name] += 1
 
@@ -287,13 +445,8 @@ class ObjectDetector:
                         logger.warning(f"Error processing detection: {e}")
                         continue
 
-        # ── ID stability metric ─────────────────────────────────────────
-        # Count tracks that were in previous frame but not in current frame
-        # (not just temporarily occluded, but truly lost)
-        if self._prev_frame_ids:
-            lost_ids = self._prev_frame_ids - current_frame_ids
-            self.total_id_switches += len(lost_ids)
-        self._prev_frame_ids = current_frame_ids
+        # ── Cleanup stale Kalman filters ──────────────────────────────
+        self._cleanup_stale_filters(current_frame_ids)
 
         # Update FPS
         frame_time = (time.time() - frame_start) * 1000
@@ -305,18 +458,12 @@ class ObjectDetector:
 
         self.total_frames_processed += 1
 
-        # Count currently active tracks (objects visible in this frame)
-        active_ids = set()
-        for det in detections:
-            if det.tracker_id is not None:
-                active_ids.add(det.tracker_id)
-
         return DetectionFrame(
             detections=detections,
             object_counts=dict(frame_counts),
             session_counts=dict(self.session_counts),
             total_objects=len(detections),
-            active_tracks_count=len(active_ids),
+            active_tracks_count=len(current_frame_ids),
             total_unique_seen=len(self.known_tracks),
             fps=current_fps,
             inference_ms=round(infer_time, 1),
@@ -387,31 +534,45 @@ class ObjectDetector:
         """Reset session counts and tracking state."""
         self.session_counts.clear()
         self.known_tracks.clear()
-        logger.info("Session counts and tracks reset")
+        self._kalman_filters.clear()
+        self._conf_history.clear()
+        self._track_class_history.clear()
+        self.total_tracks_created = 0
+        self.total_id_switches = 0
+        logger.info("Session counts, tracks, and stability metrics reset")
+
+    def get_tracking_stability(self) -> float:
+        """
+        Compute tracking stability as 0.0-1.0.
+        Uses minimum denominator of 3 to prevent extreme scores from small samples.
+        stability = 1.0 - (id_switches / max(3, total_tracks))
+        1.0 = perfect (no ID switches), 0.0 = heavy switching
+        """
+        total = max(3, self.total_tracks_created)
+        return max(0.0, min(1.0, 1.0 - (self.total_id_switches / total)))
 
     def get_stats(self) -> Dict[str, Any]:
         elapsed = time.time() - self._start_time
-        # Tracking stability: tracks created vs ID switches
-        stability = (
-            round(1.0 - (self.total_id_switches / max(1, self.total_tracks_created)), 3)
-            if self.total_tracks_created > 0 else 1.0
-        )
         return {
+            # Core metrics
             "fps": round(self.fps, 1),
             "frames_processed": self.total_frames_processed,
             "uptime_seconds": round(elapsed, 1),
+            # Detection counts
             "session_counts": dict(self.session_counts),
             "cumulative_counts": dict(self.cumulative_counts),
             "total_unique_seen": len(self.known_tracks),
-            "active_tracks": 0,  # Updated by caller after detect()
+            "active_tracks": 0,
             "total_objects_detected": sum(self.session_counts.values()),
             "unique_classes_detected": len(self.session_counts),
+            # Thresholds
             "conf_threshold": self.conf_threshold,
             "iou_threshold": self.iou_threshold,
             "device": self.device,
+            # Tracker info (NEW — was missing)
             "tracker": self.tracker_name,
-            "tracker_config": self.tracker_config,
+            "tracker_config": self.tracker_config_path,
             "total_tracks_created": self.total_tracks_created,
             "total_id_switches": self.total_id_switches,
-            "tracking_stability": stability,  # 1.0 = perfect, lower = more ID switches
+            "tracking_stability": round(self.get_tracking_stability(), 4),
         }

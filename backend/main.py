@@ -15,7 +15,7 @@ import asyncio
 import logging
 import struct
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, List
 from contextlib import asynccontextmanager
 
 # Ensure backend/ is on sys.path so local imports resolve from any CWD
@@ -405,14 +405,12 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             # ── Drain ALL pending control messages before streaming ────────
-            cmd_handled = False
             while True:
                 try:
                     message = await asyncio.wait_for(
                         websocket.receive_text(), timeout=0.05
                     )
                     cmd = json.loads(message)
-                    cmd_handled = True
 
                     if cmd.get("action") == "start":
                         detection_active = True
@@ -516,6 +514,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     "object_counts": det_frame.object_counts,
                     "session_counts": dict(detector.session_counts),
                     "total_objects": det_frame.total_objects,
+                    "active_tracks_count": det_frame.active_tracks_count,
+                    "total_unique_seen": det_frame.total_unique_seen,
                     "fps": round(det_frame.fps, 1),
                     "inference_ms": det_frame.inference_ms,
                     "capture_ms": round(cap_ms, 1),

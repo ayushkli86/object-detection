@@ -8,18 +8,6 @@ interface Props {
 
 const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
   const [stats, setStats] = useState<DetectorStats | null>(null);
-  const [topClass, setTopClass] = useState<string>('—');
-
-  // Update top class from session counts
-  useEffect(() => {
-    if (detectionData?.session_counts) {
-      const entries = Object.entries(detectionData.session_counts);
-      if (entries.length > 0) {
-        entries.sort(([, a], [, b]) => b - a);
-        setTopClass(`${entries[0][0]} (${entries[0][1]})`);
-      }
-    }
-  }, [detectionData?.session_counts]);
 
   // Fetch stats periodically
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { DetectionData, VehicleCategory } from '../types';
+import type { DetectionData } from '../types';
 
 interface Props {
   detectionData: DetectionData | null;
@@ -9,7 +9,6 @@ interface CategoryGroup {
   name: string;
   label: string;
   color: string;
-  bg: string;
   classes: string[];
 }
 
@@ -18,28 +17,24 @@ const CATEGORIES: CategoryGroup[] = [
     name: 'private',
     label: 'Private',
     color: '#3b82f6',
-    bg: 'rgba(59,130,246,0.12)',
     classes: ['car', 'motorcycle', 'bicycle', 'truck'],
   },
   {
     name: 'public',
     label: 'Public Transport',
     color: '#22d3ee',
-    bg: 'rgba(34,211,238,0.12)',
     classes: ['bus', 'tempo', 'microbus'],
   },
   {
     name: 'other',
     label: 'Other',
     color: '#a855f7',
-    bg: 'rgba(168,85,247,0.12)',
     classes: ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow'],
   },
   {
     name: 'objects',
     label: 'Objects',
     color: '#64748b',
-    bg: 'rgba(100,116,139,0.12)',
     classes: [], // catch-all
   },
 ];

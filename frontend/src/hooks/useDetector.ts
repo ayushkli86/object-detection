@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { DetectionData, DetectorStats } from '../types';
 
 const API_BASE = `/api`;
-const FRAME_INTERVAL_MS = 120; // ~8 FPS to backend
+const FRAME_INTERVAL_MS = 100; // ~10 FPS to backend (was 120)
 
 export type CameraState = 'idle' | 'requesting' | 'active' | 'error';
 
@@ -50,6 +50,7 @@ export function useDetector(): UseDetectorReturn {
   const detectingRef = useRef(false);
   const frameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFrameUrlRef = useRef<string | null>(null);
+  const prevFrameHashRef = useRef<number>(0);
 
   // ── Camera ───────────────────────────────────────────────────────────
   const requestCamera = useCallback(async (): Promise<boolean> => {
@@ -73,10 +74,10 @@ export function useDetector(): UseDetectorReturn {
       document.body.appendChild(video);
       await video.play();
 
-      // Create offscreen canvas for frame capture
+      // Create offscreen canvas for frame capture (higher res for better detection)
       const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 480;
+      canvas.width = 960;
+      canvas.height = 720;
 
       streamRef.current = stream;
       videoRef.current = video;
@@ -123,7 +124,21 @@ export function useDetector(): UseDetectorReturn {
       if (!ctx) return;
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+      // Frame deduplication: skip if frame is nearly identical to previous
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let hash = 0;
+      // Sample every 16th pixel for fast hashing
+      for (let i = 0; i < imgData.data.length; i += 64) {
+        hash = ((hash << 5) - hash + imgData.data[i]) | 0;
+      }
+      if (hash === prevFrameHashRef.current) {
+        // Frame unchanged — skip this round, retry sooner
+        frameTimerRef.current = setTimeout(sendFrameLoop, FRAME_INTERVAL_MS / 2);
+        return;
+      }
+      prevFrameHashRef.current = hash;
 
       const res = await fetch(`${API_BASE}/detect`, {
         method: 'POST',
