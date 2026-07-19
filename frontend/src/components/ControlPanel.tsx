@@ -1,47 +1,60 @@
 import React, { useState, useEffect } from 'react';
+import type { ModelsResponse } from '../types';
 
 interface Props {
   connected: boolean;
   detecting: boolean;
   onStart: () => void;
   onStop: () => void;
-  onConfig: (conf: { conf?: number; iou?: number }) => void;
+  onConfig: (conf: { conf?: number; iou?: number; model?: string; class_filter?: string; imgsz?: number }) => void;
   onReset: () => void;
+  onExport: () => void;
   currentConf: number;
-  currentFps: number;
+  modelsData: ModelsResponse | null;
+  onModelSwitch: (model: string) => Promise<boolean>;
 }
 
+const CLASS_FILTERS = [
+  { value: 'all', label: 'All 80 Classes' },
+  { value: 'vehicles', label: 'Vehicles Only' },
+  { value: 'people_animals', label: 'People & Animals' },
+  { value: 'objects', label: 'Objects Only' },
+];
+
 const ControlPanel: React.FC<Props> = ({
-  connected,
-  detecting,
-  onStart,
-  onStop,
-  onConfig,
-  onReset,
-  currentConf,
-  currentFps,
+  connected, detecting, onStart, onStop, onConfig, onReset, onExport,
+  currentConf, modelsData, onModelSwitch,
 }) => {
   const [confThresh, setConfThresh] = useState(currentConf);
-  const [targetFps, setTargetFps] = useState(currentFps);
+  const [selectedModel, setSelectedModel] = useState(modelsData?.current || 'yolov8l');
+  const [selectedFilter, setSelectedFilter] = useState('all');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
+  useEffect(() => { setConfThresh(currentConf); }, [currentConf]);
   useEffect(() => {
-    setConfThresh(currentConf);
-  }, [currentConf]);
+    if (modelsData?.current) setSelectedModel(modelsData.current);
+  }, [modelsData?.current]);
 
-  useEffect(() => {
-    setTargetFps(currentFps);
-  }, [currentFps]);
-
-  const handleStartStop = () => {
-    if (detecting) onStop();
-    else onStart();
-  };
+  const handleStartStop = () => { detecting ? onStop() : onStart(); };
 
   const handleConfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setConfThresh(val);
     onConfig({ conf: val });
+  };
+
+  const handleModelChange = async (modelName: string) => {
+    setSwitching(true);
+    setSelectedModel(modelName);
+    const ok = await onModelSwitch(modelName);
+    if (!ok) setSelectedModel(modelsData?.current || 'yolov8l');
+    setSwitching(false);
+  };
+
+  const handleFilterChange = (filter: string) => {
+    setSelectedFilter(filter);
+    onConfig({ class_filter: filter });
   };
 
   return (
@@ -64,15 +77,9 @@ const ControlPanel: React.FC<Props> = ({
           disabled={!connected}
         >
           {detecting ? (
-            <>
-              <span className="btn-icon pulse-dot" />
-              Stop Detection
-            </>
+            <><span className="btn-icon pulse-dot" />Stop Detection</>
           ) : (
-            <>
-              <span className="btn-icon play-icon">&#9654;</span>
-              Start Detection
-            </>
+            <><span className="btn-icon play-icon">&#9654;</span>Start Detection</>
           )}
         </button>
 
@@ -89,58 +96,81 @@ const ControlPanel: React.FC<Props> = ({
             <span className="control-value">{confThresh.toFixed(2)}</span>
           </label>
           <input
-            type="range"
-            min="0.05"
-            max="0.95"
-            step="0.05"
-            value={confThresh}
-            onChange={handleConfChange}
-            className="slider"
+            type="range" min="0.05" max="0.95" step="0.05"
+            value={confThresh} onChange={handleConfChange} className="slider"
           />
-          <div className="slider-labels">
-            <span>Low</span>
-            <span>High</span>
+          <div className="slider-labels"><span>Low (more detections)</span><span>High (fewer, precise)</span></div>
+        </div>
+
+        {/* Model selector */}
+        <div className="control-group">
+          <label className="control-label">
+            Model
+            <span className="control-value">{selectedModel}</span>
+          </label>
+          <div className="model-selector">
+            {modelsData && Object.entries(modelsData.available).map(([name, info]) => (
+              <button
+                key={name}
+                className={`model-btn ${selectedModel === name ? 'active' : ''} ${switching ? 'switching' : ''}`}
+                onClick={() => handleModelChange(name)}
+                disabled={switching}
+                title={`${info.params} params | mAP ${info.map} | ~${info.speed_ms}ms`}
+              >
+                <span className="model-btn-name">{name.replace('yolov8', 'v8')}</span>
+                <span className="model-btn-info">mAP {info.map}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Class filter */}
+        <div className="control-group">
+          <label className="control-label">Class Filter</label>
+          <div className="filter-chips">
+            {CLASS_FILTERS.map(f => (
+              <button
+                key={f.value}
+                className={`filter-chip ${selectedFilter === f.value ? 'active' : ''}`}
+                onClick={() => handleFilterChange(f.value)}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Advanced toggle */}
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowAdvanced(!showAdvanced)}>
           {showAdvanced ? 'Hide' : 'Show'} Advanced
         </button>
 
         {showAdvanced && (
           <div className="advanced-controls">
-            {/* Target FPS */}
             <div className="control-group">
               <label className="control-label">
                 Target FPS
-                <span className="control-value">{targetFps}</span>
+                <span className="control-value">15</span>
               </label>
               <input
-                type="range"
-                min="1"
-                max="30"
-                step="1"
-                value={targetFps}
+                type="range" min="1" max="30" step="1" defaultValue="15"
+                className="slider"
                 onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setTargetFps(val);
                   fetch('/api/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ max_fps: val }),
+                    body: JSON.stringify({ max_fps: parseInt(e.target.value, 10) }),
                   }).catch(() => {});
                 }}
-                className="slider"
               />
             </div>
 
-            {/* Reset Counts */}
             <button className="btn btn-warning btn-sm" onClick={onReset}>
               Reset Object Counts
+            </button>
+
+            <button className="btn btn-ghost btn-sm" onClick={onExport}>
+              Export History (CSV)
             </button>
           </div>
         )}

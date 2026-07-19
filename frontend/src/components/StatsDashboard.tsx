@@ -9,7 +9,6 @@ interface Props {
 const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
   const [stats, setStats] = useState<DetectorStats | null>(null);
 
-  // Fetch stats periodically
   useEffect(() => {
     const interval = setInterval(async () => {
       const s = await fetchStats();
@@ -18,7 +17,6 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  // Compute top-5 detected classes
   const top5 = useMemo(() => {
     if (!detectionData?.session_counts) return [];
     return Object.entries(detectionData.session_counts)
@@ -37,19 +35,7 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
     return `${sec}s`;
   }, [stats?.uptime_seconds]);
 
-  const totalDetected = useMemo(() => {
-    if (detectionData?.session_counts) {
-      return Object.values(detectionData.session_counts).reduce((a, b) => a + b, 0);
-    }
-    return stats?.total_objects_detected ?? 0;
-  }, [detectionData?.session_counts, stats?.total_objects_detected]);
-
-  const uniqueClasses = useMemo(() => {
-    if (detectionData?.session_counts) {
-      return Object.keys(detectionData.session_counts).length;
-    }
-    return stats?.unique_classes_detected ?? 0;
-  }, [detectionData?.session_counts, stats?.unique_classes_detected]);
+  const modelName = stats?.model || detectionData?.model || 'yolov8l';
 
   return (
     <div className="stats-dashboard">
@@ -64,7 +50,6 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
       </div>
 
       <div className="stats-grid">
-        {/* Metric cards */}
         <div className="stat-card highlight">
           <div className="stat-value">{detectionData?.total_unique_seen ?? 0}</div>
           <div className="stat-label">Unique Objects</div>
@@ -74,11 +59,11 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
           <div className="stat-label">Active Tracks</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{detectionData?.fps.toFixed(1) ?? '0.0'}</div>
+          <div className="stat-value">{detectionData?.fps?.toFixed(1) ?? '0.0'}</div>
           <div className="stat-label">FPS</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{detectionData?.inference_ms.toFixed(0) ?? '—'}<small>ms</small></div>
+          <div className="stat-value">{detectionData?.inference_ms?.toFixed(0) ?? '—'}<small>ms</small></div>
           <div className="stat-label">Inference</div>
         </div>
         <div className="stat-card">
@@ -91,7 +76,6 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
         </div>
       </div>
 
-      {/* Top 5 Classes */}
       {top5.length > 0 && (
         <div className="top-classes">
           <h4>Most Detected</h4>
@@ -105,7 +89,6 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
         </div>
       )}
 
-      {/* Device Info */}
       {stats && (
         <div className="device-info">
           <div className="device-item">
@@ -113,12 +96,28 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
             <span className="device-value code">{stats.device}</span>
           </div>
           <div className="device-item">
+            <span className="device-label">Model</span>
+            <span className="device-value">{modelName.toUpperCase()}</span>
+          </div>
+          <div className="device-item">
+            <span className="device-label">Params</span>
+            <span className="device-value">{stats.model_info?.params || '—'}</span>
+          </div>
+          <div className="device-item">
+            <span className="device-label">mAP@50-95</span>
+            <span className="device-value">{stats.model_info?.map || '—'}</span>
+          </div>
+          <div className="device-item">
             <span className="device-label">Confidence</span>
             <span className="device-value">{stats.conf_threshold.toFixed(2)}</span>
           </div>
           <div className="device-item">
-            <span className="device-label">Model</span>
-            <span className="device-value">YOLOv8n (Traffic)</span>
+            <span className="device-label">Active Classes</span>
+            <span className="device-value">{stats.active_classes || 80}</span>
+          </div>
+          <div className="device-item">
+            <span className="device-label">Input Size</span>
+            <span className="device-value">{stats.imgsz || 640}px</span>
           </div>
         </div>
       )}

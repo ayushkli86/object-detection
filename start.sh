@@ -20,8 +20,10 @@ VENV_PIP="$VENV_DIR/bin/pip"
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8765}"
-MODEL_PATH="${MODEL_PATH:-$SCRIPT_DIR/models/yolov8n.pt}"
+MODEL_PATH="${MODEL_PATH:-$SCRIPT_DIR/models/yolov8l.pt}"
 TRACKER="${TRACKER:-botsort}"
+IMGSZ="${IMGSZ:-640}"
+CLASS_FILTER="${CLASS_FILTER:-all}"
 
 G='\033[0;32m' C='\033[0;36m' Y='\033[1;33m' R='\033[0;31m' B='\033[1m' NC='\033[0m'
 log()  { echo -e "${C}[INFO]${NC} $*"; }
@@ -68,8 +70,8 @@ trap cleanup INT TERM
 # ── Banner ──────────────────────────────────────────────────────────────
 echo -e "${C}"
 echo "  ╔══════════════════════════════════════════════════╗"
-echo "  ║         Object Detection — YOLOv8               ║"
-echo "  ║   Real-Time Detection via Webcam/Screen         ║"
+echo "  ║         Object Detection — YOLOv8 (l)           ║"
+echo "  ║        Real-Time Camera Object Detection        ║"
 echo "  ╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -130,10 +132,10 @@ log "Starting server on $HOST:$PORT ..."
 (
     cd "$BACKEND_DIR"
     exec env MODEL_PATH="$MODEL_PATH" PORT="$PORT" TRACKER="$TRACKER" \
+        IMGSZ="$IMGSZ" CLASS_FILTER="$CLASS_FILTER" \
         "$VENV_PYTHON" -m uvicorn main:app \
             --host "$HOST" --port "$PORT" \
-            --log-level info \
-            --ws-ping-interval 30 --ws-ping-timeout 10
+            --log-level info
 ) &
 BACKEND_PID=$!
 

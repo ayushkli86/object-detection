@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { DetectionData } from '../types';
 
 interface Props {
@@ -9,7 +9,6 @@ const MAX_POINTS = 60;
 
 const TrendChart: React.FC<Props> = ({ detectionData }) => {
   const [history, setHistory] = useState<number[]>([]);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Append current active_tracks_count to history
   useEffect(() => {
@@ -69,7 +68,7 @@ const TrendChart: React.FC<Props> = ({ detectionData }) => {
         </div>
       </div>
 
-      <div className="trend-svg-container" ref={containerRef}>
+      <div className="trend-svg-container">
         {history.length > 1 ? (
           <svg viewBox={`0 0 ${width} ${height}`} className="trend-svg" preserveAspectRatio="none">
             {/* Grid lines */}

@@ -1,8 +1,42 @@
-node_modules/
+# Python
 __pycache__/
-*.pyc
-venv/
-.env
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
 dist/
-*.pt
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend build
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Project specific
+*.zip
+*.pdf
+*.pt
+kaggle-notebook/
+screen_detections/
+screenshots/
+*.log
+Traffic_Object_Detection_Complete_Implementation_Guide.html

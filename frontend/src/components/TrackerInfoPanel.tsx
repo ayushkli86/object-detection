@@ -30,6 +30,8 @@ const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
   const stabilityColor =
     stabilityPct >= 90 ? '#22c55e' : stabilityPct >= 70 ? '#f59e0b' : '#ef4444';
 
+  const modelName = stats.model || 'yolov8l';
+
   return (
     <div className="tracker-info">
       <div className="panel-header">
@@ -37,7 +39,7 @@ const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
-          Tracker
+          Detection
         </h3>
         <span
           className="tracker-type-badge"
@@ -49,6 +51,17 @@ const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
 
       <div className="tracker-body">
         <div className="tracker-desc">{tracker.desc}</div>
+
+        {/* Model info */}
+        <div className="tracker-model-info">
+          <span className="tracker-model-name">{modelName.toUpperCase()}</span>
+          <span className="tracker-model-detail">
+            {stats.model_info?.params || '—'} params | mAP {stats.model_info?.map || '—'}
+          </span>
+          <span className="tracker-model-detail">
+            Input: {stats.imgsz || 640}px | {stats.active_classes || 80} classes
+          </span>
+        </div>
 
         {/* Stability meter */}
         <div className="tracker-meter">

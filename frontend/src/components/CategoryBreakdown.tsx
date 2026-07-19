@@ -15,26 +15,32 @@ interface CategoryGroup {
 const CATEGORIES: CategoryGroup[] = [
   {
     name: 'private',
-    label: 'Private',
+    label: 'Private Vehicles',
     color: '#3b82f6',
-    classes: ['car', 'motorcycle', 'bicycle', 'truck'],
+    classes: ['car', 'motorcycle', 'bicycle'],
   },
   {
     name: 'public',
     label: 'Public Transport',
     color: '#22d3ee',
-    classes: ['bus', 'tempo', 'microbus'],
+    classes: ['bus', 'truck', 'train'],
   },
   {
-    name: 'other',
-    label: 'Other',
-    color: '#a855f7',
-    classes: ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow'],
+    name: 'people_animals',
+    label: 'People & Animals',
+    color: '#22c55e',
+    classes: ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe'],
+  },
+  {
+    name: 'traffic',
+    label: 'Traffic Infrastructure',
+    color: '#ef4444',
+    classes: ['traffic light', 'stop sign', 'fire hydrant', 'parking meter'],
   },
   {
     name: 'objects',
-    label: 'Objects',
-    color: '#64748b',
+    label: 'Other Objects',
+    color: '#a855f7',
     classes: [], // catch-all
   },
 ];
@@ -54,7 +60,6 @@ const CategoryBreakdown: React.FC<Props> = ({ detectionData }) => {
       return { ...cat, total, entries };
     });
 
-    // Catch-all: anything not matched
     const unmatched = Object.entries(counts)
       .filter(([k]) => !matched.has(k))
       .reduce((sum, [, v]) => sum + v, 0);

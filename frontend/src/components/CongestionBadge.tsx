@@ -21,7 +21,6 @@ function getClassify(count: number): typeof LEVELS[number] {
 
 const CongestionBadge: React.FC<Props> = ({ detectionData }) => {
   const activeCount = detectionData?.active_tracks_count ?? 0;
-  const totalSeen = detectionData?.total_unique_seen ?? 0;
 
   const level = useMemo(() => getClassify(activeCount), [activeCount]);
   const prevLevel = useMemo(() => getClassify(Math.max(0, activeCount - 5)), [activeCount]);
