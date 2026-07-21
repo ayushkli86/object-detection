@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { ModelsResponse } from '../types';
 
 interface Props {
@@ -15,7 +15,7 @@ interface Props {
 }
 
 const CLASS_FILTERS = [
-  { value: 'all', label: 'All 80 Classes' },
+  { value: 'all', label: 'All Classes' },
   { value: 'vehicles', label: 'Vehicles Only' },
   { value: 'people_animals', label: 'People & Animals' },
   { value: 'objects', label: 'Objects Only' },
@@ -30,6 +30,7 @@ const ControlPanel: React.FC<Props> = ({
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const switchingRef = useRef(false);
 
   useEffect(() => { setConfThresh(currentConf); }, [currentConf]);
   useEffect(() => {
@@ -45,11 +46,14 @@ const ControlPanel: React.FC<Props> = ({
   };
 
   const handleModelChange = async (modelName: string) => {
+    if (switchingRef.current) return; // prevent double-click race
+    switchingRef.current = true;
     setSwitching(true);
     setSelectedModel(modelName);
     const ok = await onModelSwitch(modelName);
     if (!ok) setSelectedModel(modelsData?.current || 'yolov8l');
     setSwitching(false);
+    switchingRef.current = false;
   };
 
   const handleFilterChange = (filter: string) => {

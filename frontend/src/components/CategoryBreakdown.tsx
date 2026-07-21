@@ -22,7 +22,7 @@ const CATEGORIES: CategoryGroup[] = [
   {
     name: 'public',
     label: 'Public Transport',
-    color: '#22d3ee',
+    color: '#4ecdc4',
     classes: ['bus', 'truck', 'train'],
   },
   {
@@ -34,13 +34,13 @@ const CATEGORIES: CategoryGroup[] = [
   {
     name: 'traffic',
     label: 'Traffic Infrastructure',
-    color: '#ef4444',
+    color: '#e85454',
     classes: ['traffic light', 'stop sign', 'fire hydrant', 'parking meter'],
   },
   {
     name: 'objects',
     label: 'Other Objects',
-    color: '#a855f7',
+    color: '#9b7bd4',
     classes: [], // catch-all
   },
 ];

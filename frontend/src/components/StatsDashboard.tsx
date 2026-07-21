@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { DetectionData, DetectorStats } from '../types';
 
 interface Props {
@@ -8,13 +8,19 @@ interface Props {
 
 const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
   const [stats, setStats] = useState<DetectorStats | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let cancelled = false;
+    const load = async () => {
       const s = await fetchStats();
-      if (s) setStats(s);
-    }, 3000);
-    return () => clearInterval(interval);
+      if (!cancelled && s) setStats(s);
+      if (!cancelled) {
+        timerRef.current = setTimeout(load, 3000);
+      }
+    };
+    load();
+    return () => { cancelled = true; if (timerRef.current) clearTimeout(timerRef.current); };
   }, [fetchStats]);
 
   const top5 = useMemo(() => {

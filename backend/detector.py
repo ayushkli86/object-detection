@@ -1,6 +1,6 @@
 """
 YOLO Object Detector with Multi-Tracker Support
-Uses Ultralytics YOLOv8 pretrained on COCO dataset (80 classes).
+Uses Ultralytics YOLOv8 pretrained on COCO dataset (traffic classes).
 Each unique object gets a persistent tracker_id across frames.
 
 Improvements over v1:
@@ -91,13 +91,9 @@ CLASS_SUBSETS = {
     "objects": [24, 25, 26, 27, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 71, 72, 73, 74, 75, 76, 77, 78, 79],
 }
 
-# Available model sizes
+# Available model sizes (YOLOv8)
 AVAILABLE_MODELS = {
-    "yolov8n": {"file": "yolov8n.pt", "params": "3.2M", "map": 37.3, "speed_ms": 0.99},
-    "yolov8s": {"file": "yolov8s.pt", "params": "11.2M", "map": 44.9, "speed_ms": 1.20},
-    "yolov8m": {"file": "yolov8m.pt", "params": "25.9M", "map": 50.2, "speed_ms": 1.83},
     "yolov8l": {"file": "yolov8l.pt", "params": "43.7M", "map": 52.9, "speed_ms": 2.39},
-    "yolov8x": {"file": "yolov8x.pt", "params": "68.2M", "map": 53.9, "speed_ms": 3.53},
 }
 
 
@@ -136,7 +132,11 @@ class BboxKalmanFilter:
         z = np.asarray(measurement, dtype=np.float64)
         y = z - self.H @ self.state
         S = self.H @ self.P @ self.H.T + self.R
-        K = self.P @ self.H.T @ np.linalg.inv(S)
+        try:
+            K = self.P @ self.H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            # Singular matrix — use pseudo-inverse as fallback
+            K = self.P @ self.H.T @ np.linalg.pinv(S)
         self.state = self.state + K @ y
         I = np.eye(8)
         self.P = (I - K @ self.H) @ self.P
@@ -271,8 +271,7 @@ class ObjectDetector:
 
         # Performance tracking
         self.fps = 0.0
-        self._fps_history: List[float] = []
-        self._fps_window = 30
+        self._fps_history: collections.deque = collections.deque(maxlen=30)
         self.total_frames_processed = 0
         self._start_time = time.time()
 
@@ -324,7 +323,9 @@ class ObjectDetector:
 
         try:
             logger.info(f"Switching model to {model_name} ({info['params']} params, mAP {info['map']})...")
-            self.model = YOLO(resolved)
+            # Load into temporary variable first to avoid partial state
+            new_model = YOLO(resolved)
+            self.model = new_model
             self.model_name = model_name
             self._model_path = resolved
 
@@ -350,7 +351,7 @@ class ObjectDetector:
         elif subset == "all":
             self._class_subset_name = "all"
             self._filtered_classes = list(range(80))
-            logger.info("Class filter: all (80 classes)")
+            logger.info("Class filter: all (traffic classes)")
 
     # ── Zone management ────────────────────────────────────────────────
     def add_zone(self, name: str, points: List[List[int]]) -> DetectionZone:
@@ -588,8 +589,6 @@ class ObjectDetector:
         # Update FPS
         frame_time = (time.time() - frame_start) * 1000
         self._fps_history.append(1.0 / (frame_time / 1000) if frame_time > 0 else 0)
-        if len(self._fps_history) > self._fps_window:
-            self._fps_history.pop(0)
         current_fps = sum(self._fps_history) / len(self._fps_history) if self._fps_history else 0
         self.fps = current_fps
         self.total_frames_processed += 1
@@ -655,12 +654,15 @@ class ObjectDetector:
         ]
 
     def reset_session_counts(self):
-        self.session_counts.clear()
-        self.known_tracks.clear()
-        self._kalman_filters.clear()
-        self._conf_history.clear()
-        self._track_frame_count.clear()
-        self._track_first_seen.clear()
+        # Assign new empty containers instead of .clear() to avoid
+        # RuntimeError: dictionary changed size during iteration
+        self.session_counts = defaultdict(int)
+        self.cumulative_counts = defaultdict(int)
+        self.known_tracks = {}
+        self._kalman_filters = {}
+        self._conf_history = defaultdict(lambda: collections.deque(maxlen=5))
+        self._track_frame_count = defaultdict(int)
+        self._track_first_seen = {}
         self.total_tracks_created = 0
         self.total_id_switches = 0
         logger.info("Session counts, tracks, and stability metrics reset")

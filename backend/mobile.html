@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Traffic Object Detection — Camera Stream</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #0f172a; color: #e4e7ed; overflow: hidden; height: 100dvh; display: flex; flex-direction: column; }
+  #video { flex: 1; width: 100%; object-fit: cover; background: #111; }
+  .controls { padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 12px; background: #1f2231; border-top: 1px solid #334155; }
+  .status { font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.connected { background: #22c55e; box-shadow: 0 0 8px #22c55e88; }
+  .dot.disconnected { background: #ef4444; }
+  .dot.connecting { background: #f59e0b; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+  .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .btn-start { background: #22c55e; color: #e4e7ed; }
+  .btn-start:active { transform: scale(0.95); }
+  .btn-stop { background: #ef4444; color: #e4e7ed; }
+  .btn:disabled { opacity: 0.5; }
+  .detections { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; backdrop-filter: blur(4px); }
+  .fps-tag { background: rgba(59,130,246,0.8); }
+  .obj-tag { background: rgba(34,197,94,0.8); }
+  .server-input { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 24px; gap: 16px; text-align: center; }
+  .server-input label { font-size: 14px; opacity: 0.7; }
+  .server-input input { width: 100%; max-width: 320px; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155; background: #1f2231; color: #e4e7ed; font-size: 16px; text-align: center; font-family: monospace; }
+  .server-input .hint { font-size: 12px; opacity: 0.5; max-width: 320px; }
+  .name-input { width: 100%; max-width: 320px; padding: 10px 16px; border-radius: 8px; border: 1px solid #334155; background: #1f2231; color: #e4e7ed; font-size: 16px; text-align: center; }
+  .video-wrapper { flex: 1; position: relative; display: flex; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="setup" class="server-input">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+  </svg>
+  <h2>Stream Phone Camera</h2>
+  <label>Server Address</label>
+  <input id="serverInput" type="text" placeholder="192.168.1.100:8765" value=""/>
+  <label>Phone Name</label>
+  <input id="nameInput" class="name-input" type="text" placeholder="My Phone" value=""/>
+  <div class="hint">Same Wi-Fi network required. Your PC's IP is shown in the server terminal.</div>
+  <button class="btn btn-start" onclick="testThenConnect()" id="mainBtn">Connect & Stream</button>
+  <div id="testResult" style="font-size:12px;opacity:0.7;min-height:18px;"></div>
+</div>
+<div id="streaming" class="video-wrapper" style="display:none">
+  <div class="detections" id="detections"></div>
+  <video id="video" autoplay playsinline muted></video>
+</div>
+<div class="controls" id="controls" style="display:none">
+  <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connected</span></div>
+  <button class="btn btn-stop" onclick="disconnect()">Disconnect</button>
+</div>
+<script>
+// Auto-fill server IP from current page URL
+const serverInput = document.getElementById('serverInput');
+if (window.location.host && window.location.host !== 'localhost:8765') {
+  serverInput.value = window.location.host;
+} else {
+  serverInput.placeholder = '192.168.31.58:8765';
+}
+
+let ws = null, stream = null, video = null, interval = null, canvas = null, ctx = null, frameCount = 0, fpsTimer = null, reconnectTimer = null;
+
+function testThenConnect() {
+  const server = serverInput.value.trim();
+  if (!server) { document.getElementById('testResult').textContent = 'Enter server address first'; return; }
+  document.getElementById('testResult').textContent = 'Testing connection...';
+  document.getElementById('mainBtn').disabled = true;
+  fetch('http://' + server + '/api/ping')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('testResult').textContent = '✅ Server reachable! Connecting...';
+      connect(server);
+    })
+    .catch(() => {
+      document.getElementById('testResult').textContent = '❌ Cannot reach server. Check Wi-Fi network and IP address.';
+      document.getElementById('mainBtn').disabled = false;
+    });
+}
+
+function connect(server) {
+  const name = document.getElementById('nameInput').value.trim() || 'Phone';
+  const url = `ws://${server}/ws/camera?name=${encodeURIComponent(name)}`;
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('streaming').style.display = 'flex';
+  document.getElementById('controls').style.display = 'flex';
+  document.getElementById('stopBtn').disabled = true;
+  setStatus('connecting', 'Connecting...');
+  video = document.getElementById('video');
+  navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'environment' }, audio: false })
+  .then(s => {
+    stream = s; video.srcObject = s; video.play();
+    canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480;
+    ctx = canvas.getContext('2d');
+    startWs(url);
+  }).catch(() => { setStatus('disconnected', 'Camera access denied'); });
+}
+
+function startWs(url) {
+  if (ws) ws.close();
+  ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    setStatus('connected', 'Streaming');
+    document.getElementById('stopBtn').disabled = false;
+    startStreaming();
+  };
+  ws.onmessage = (event) => {
+    try { const data = JSON.parse(event.data);
+      if (data.type === 'detection' && data.detections) {
+        let html = `<span class="tag fps-tag">📡 ${data.fps || '—'} FPS</span>`;
+        const grouped = {};
+        data.detections.forEach(d => { grouped[d.class_name] = (grouped[d.class_name] || 0) + 1; });
+        Object.entries(grouped).slice(0, 6).forEach(([n, c]) => { html += `<span class="tag obj-tag">${n} ${c}</span>`; });
+        if (data.detections.length === 0) html += `<span class="tag obj-tag">No objects</span>`;
+        document.getElementById('detections').innerHTML = html;
+      }
+    } catch(e) {}
+  };
+  ws.onclose = () => {
+    setStatus('disconnected', 'Disconnected');
+    stopStreaming();
+    // Auto-reconnect after 2 seconds
+    reconnectTimer = setTimeout(() => { if (ws === null) startWs(url); }, 2000);
+  };
+  ws.onerror = () => {
+    setStatus('disconnected', 'Connection error');
+    stopStreaming();
+    reconnectTimer = setTimeout(() => { if (ws === null) startWs(url); }, 2000);
+  };
+}
+
+function startStreaming() {
+  if (interval) clearInterval(interval);
+  if (fpsTimer) clearInterval(fpsTimer);
+  frameCount = 0;
+  interval = setInterval(() => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    ctx.drawImage(video, 0, 0, 640, 480);
+    canvas.toBlob(blob => { blob.arrayBuffer().then(buf => { ws.send(buf); frameCount++; }); }, 'image/jpeg', 0.8);
+  }, 100);
+  fpsTimer = setInterval(() => { frameCount = 0; }, 1000);
+}
+
+function stopStreaming() {
+  if (interval) { clearInterval(interval); interval = null; }
+  if (fpsTimer) { clearInterval(fpsTimer); fpsTimer = null; }
+}
+
+function disconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  stopStreaming();
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  location.reload();
+}
+
+function setStatus(state, text) {
+  document.getElementById('statusDot').className = 'dot ' + state;
+  document.getElementById('statusText').textContent = text;
+}
+</script>
+</body>
+</html>

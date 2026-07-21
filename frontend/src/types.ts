@@ -61,3 +61,17 @@ export interface ModelsResponse {
 
 /** Congestion level */
 export type CongestionLevel = 'low' | 'medium' | 'high' | 'severe';
+
+/** Camera source (local or remote mobile) */
+export interface CameraSource {
+  id: string;
+  name: string;
+  type: 'local' | 'remote';
+  active: boolean;
+  last_seen: number;
+}
+
+/** Remote camera list response */
+export interface CamerasResponse {
+  cameras: CameraSource[];
+}

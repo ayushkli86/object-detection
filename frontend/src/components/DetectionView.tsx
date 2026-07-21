@@ -6,17 +6,18 @@ interface Props {
   frameCanvas: HTMLCanvasElement | null;
   detecting: boolean;
   detectionData: DetectionData | null;
+  remoteFrameUrl?: string | null;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  car: '#3b82f6', truck: '#2563eb', bus: '#22d3ee',
-  motorcycle: '#8b5cf6', bicycle: '#a855f7',
-  person: '#22c55e', cat: '#fbbf24', dog: '#f59e0b',
-  bird: '#10b981', horse: '#d97706', sheep: '#d1d5db', cow: '#b4a078',
-  'traffic light': '#ef4444', 'stop sign': '#dc2626', 'fire hydrant': '#f43f5e',
-  laptop: '#6366f1', 'cell phone': '#a855f7', tv: '#3b82f6',
-  keyboard: '#6b7280', mouse: '#9ca3af',
-  train: '#0ea5e9', boat: '#38bdf8',
+  car: '#3b82f6', truck: '#2563eb', bus: '#14b8a6',
+  motorcycle: '#8b5cf6', bicycle: '#a78bfa',
+  person: '#22c55e', cat: '#f59e0b', dog: '#d97706',
+  bird: '#14b8a6', horse: '#f97316', sheep: '#c4b89a', cow: '#b4a078',
+  'traffic light': '#ef4444', 'stop sign': '#dc2626', 'fire hydrant': '#ef4444',
+  laptop: '#8b5cf6', 'cell phone': '#8b5cf6', tv: '#3b82f6',
+  keyboard: '#94a3b8', mouse: '#8a7a6a',
+  train: '#14b8a6', boat: '#14b8a6',
 };
 const FALLBACK_COLORS = [
   '#38b8eb', '#56cf63', '#f79646', '#c850c0',
@@ -24,21 +25,28 @@ const FALLBACK_COLORS = [
 ];
 
 function getColor(name: string, id: number): string {
-  return CATEGORY_COLORS[name] || FALLBACK_COLORS[id % FALLBACK_COLORS.length];
+  return CATEGORY_COLORS[name] || FALLBACK_COLORS[(id || 0) % FALLBACK_COLORS.length] || '#888888';
 }
 
 function getContrastColor(hex: string): string {
+  if (!hex || typeof hex !== 'string' || hex.length < 7) return '#ffffff';
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return '#ffffff';
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5 ? '#000000' : '#ffffff';
 }
 
 const DetectionView: React.FC<Props> = ({
-  videoElement, frameCanvas, detecting, detectionData,
+  videoElement, frameCanvas, detecting, detectionData, remoteFrameUrl,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
+  const remoteImgRef = useRef<HTMLImageElement | null>(null);
+  const prevRemoteUrlRef = useRef<string | null>(null);
+  const remoteUrlRef = useRef<string | null>(null);
+
+  useEffect(() => { remoteUrlRef.current = remoteFrameUrl ?? null; }, [remoteFrameUrl]);
 
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -61,6 +69,15 @@ const DetectionView: React.FC<Props> = ({
     }
   }, [selectedIdx]);
 
+  // ── Load remote camera JPEG image ──────────────────────────────────
+  useEffect(() => {
+    if (!remoteFrameUrl) return;
+    if (remoteFrameUrl === prevRemoteUrlRef.current) return;
+    if (!remoteImgRef.current) remoteImgRef.current = new Image();
+    remoteImgRef.current.src = remoteFrameUrl;
+    prevRemoteUrlRef.current = remoteFrameUrl;
+  }, [remoteFrameUrl]);
+
   // ── Main render loop ───────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -72,6 +89,7 @@ const DetectionView: React.FC<Props> = ({
 
     const render = () => {
       if (!running) return;
+      try {
 
       const container = canvas.parentElement;
       if (!container) { rafRef.current = requestAnimationFrame(render); return; }
@@ -84,9 +102,15 @@ const DetectionView: React.FC<Props> = ({
 
       // Determine source to draw
       let srcW = 0, srcH = 0;
-      let drawSource: HTMLVideoElement | HTMLCanvasElement | null = null;
+      let drawSource: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement | null = null;
 
-      if (detecting && frameCanvas) {
+      if (remoteUrlRef.current && detecting && remoteImgRef.current?.complete && remoteImgRef.current.naturalWidth > 0) {
+        // Remote camera source
+        const img = remoteImgRef.current;
+        srcW = img.naturalWidth;
+        srcH = img.naturalHeight;
+        drawSource = img;
+      } else if (detecting && frameCanvas) {
         // Detection active — draw from capture canvas (has latest frame)
         if (frameCanvas.width === 0 || frameCanvas.height === 0) {
           rafRef.current = requestAnimationFrame(render);
@@ -200,7 +224,11 @@ const DetectionView: React.FC<Props> = ({
 
             const labelY = y1 > 30 ? y1 - labelH - 6 : y2 + 6;
             ctx.beginPath();
-            ctx.roundRect(x1, labelY, labelW, labelH, 3);
+            if (typeof ctx.roundRect === 'function') {
+              ctx.roundRect(x1, labelY, labelW, labelH, 3);
+            } else {
+              ctx.rect(x1, labelY, labelW, labelH);
+            }
             ctx.fill();
 
             ctx.fillStyle = getContrastColor(color);
@@ -225,8 +253,12 @@ const DetectionView: React.FC<Props> = ({
         boxesRef.current = newBoxes;
       }
 
-      rafRef.current = requestAnimationFrame(render);
-    };
+    } catch (e) {
+      console.error('DetectionView render error:', e);
+    }
+
+    rafRef.current = requestAnimationFrame(render);
+  };
 
     rafRef.current = requestAnimationFrame(render);
     return () => { running = false; cancelAnimationFrame(rafRef.current); };
@@ -270,6 +302,13 @@ const DetectionView: React.FC<Props> = ({
           onClick={handleClick}
           onMouseLeave={handleMouseLeave}
         />
+        {/* Loading state: detecting but no data yet */}
+        {detecting && !detectionData && (
+          <div className="detection-loading">
+            <div className="spinner" />
+            <p>Waiting for camera frames...</p>
+          </div>
+        )}
         <div className="frame-overlay">
           {!detecting && <span className="badge badge-source">CAMERA PREVIEW</span>}
           {detecting && detectionData && (

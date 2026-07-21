@@ -7,7 +7,7 @@ interface Props {
 
 const LEVELS: { level: CongestionLevel; label: string; color: string; icon: string; max: number }[] = [
   { level: 'low',      label: 'Low',      color: '#22c55e', icon: '●', max: 15 },
-  { level: 'medium',   label: 'Medium',   color: '#f59e0b', icon: '●●', max: 35 },
+  { level: 'medium',   label: 'Medium',   color: '#f0a500', icon: '●●', max: 35 },
   { level: 'high',     label: 'High',     color: '#f97316', icon: '●●●', max: 60 },
   { level: 'severe',   label: 'Severe',   color: '#ef4444', icon: '●●●●', max: Infinity },
 ];

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { DetectorStats } from '../types';
 
 interface Props {
@@ -6,21 +6,25 @@ interface Props {
 }
 
 const TRACKER_INFO: Record<string, { name: string; desc: string; color: string }> = {
-  botsort: { name: 'BoT-SORT', desc: 'Appearance + Motion (ReID)', color: '#22d3ee' },
-  bytetrack: { name: 'ByteTrack', desc: 'IoU-based matching', color: '#3b82f6' },
+  botsort: { name: 'BoT-SORT', desc: 'Appearance + Motion (ReID)', color: '#4ecdc4' },
+  bytetrack: { name: 'ByteTrack', desc: 'IoU-based matching', color: '#5b8af5' },
 };
 
 const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
   const [stats, setStats] = useState<DetectorStats | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       const s = await fetchStats();
-      if (s) setStats(s);
+      if (!cancelled && s) setStats(s);
+      if (!cancelled) {
+        timerRef.current = setTimeout(load, 3000);
+      }
     };
     load();
-    const interval = setInterval(load, 3000);
-    return () => clearInterval(interval);
+    return () => { cancelled = true; if (timerRef.current) clearTimeout(timerRef.current); };
   }, [fetchStats]);
 
   if (!stats) return null;
@@ -28,7 +32,7 @@ const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
   const tracker = TRACKER_INFO[stats.tracker] || { name: stats.tracker, desc: 'Custom', color: '#64748b' };
   const stabilityPct = Math.round(stats.tracking_stability * 100);
   const stabilityColor =
-    stabilityPct >= 90 ? '#22c55e' : stabilityPct >= 70 ? '#f59e0b' : '#ef4444';
+    stabilityPct >= 90 ? '#6b7c5e' : stabilityPct >= 70 ? '#b8860b' : '#8b3a3a';
 
   const modelName = stats.model || 'yolov8l';
 

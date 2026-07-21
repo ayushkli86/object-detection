@@ -8,38 +8,63 @@ import CongestionBadge from './components/CongestionBadge';
 import CategoryBreakdown from './components/CategoryBreakdown';
 import TrendChart from './components/TrendChart';
 import TrackerInfoPanel from './components/TrackerInfoPanel';
-import type { ModelsResponse } from './types';
+import type { ModelsResponse, CameraSource } from './types';
+import CameraGrid from './components/CameraGrid';
 import './App.css';
 
 const App: React.FC = () => {
   const {
     cameraState, cameraError, requestCamera, videoElement,
-    startDetection, stopDetection, detecting, detectionData, frameCanvas,
+    startDetection, stopDetection, detecting, detectionData, frameCanvas, remoteFrameUrl, lanIp,
     connected, fetchStats, fetchModels, switchModel,
+    activeCameraId, setActiveCamera, availableCameras, fetchCameras,
   } = useDetector();
 
   const [modelsData, setModelsData] = useState<ModelsResponse | null>(null);
+  const [initialConf, setInitialConf] = useState(0.35);
+  const [showGrid, setShowGrid] = useState(false);
 
   useEffect(() => {
-    if (connected) fetchModels().then(setModelsData);
+    if (connected) {
+      fetchModels().then(setModelsData);
+      fetch('/api/stats').then(r => r.json()).then(s => {
+        if (s?.conf_threshold) setInitialConf(s.conf_threshold);
+      }).catch(() => {});
+    }
   }, [connected, fetchModels]);
+
+  // Poll camera list for badge count
+  useEffect(() => {
+    if (!connected) return;
+    const poll = async () => { await fetchCameras(); };
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
+  }, [connected, fetchCameras]);
 
   const handleConfig = useCallback(
     (conf: { conf?: number; iou?: number; model?: string; class_filter?: string; imgsz?: number }) => {
       fetch('/api/config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(conf),
-      }).catch(() => {});
+      }).catch(e => console.warn('Config update failed:', e));
     }, []
   );
 
   const handleReset = useCallback(() => {
-    fetch('/api/reset', { method: 'POST' }).catch(() => {});
+    fetch('/api/reset', { method: 'POST' }).catch(e => console.warn('Reset failed:', e));
   }, []);
 
   const handleExportCSV = useCallback(() => {
     window.open('/api/export/csv', '_blank');
   }, []);
+
+  const handleSwitchCamera = async (id: string) => {
+    await setActiveCamera(id);
+    fetchCameras();
+  };
+
+  const remoteCount = availableCameras.filter(c => c.type === 'remote').length;
 
   // ── Loading ──────────────────────────────────────────────────────────
   if (!connected) {
@@ -98,7 +123,7 @@ const App: React.FC = () => {
             </div>
             <h2>Camera Access Required</h2>
             <p className="permission-desc">
-              Object Detection uses your camera to detect objects in real-time.
+              Traffic Object Detection System uses your camera to detect vehicles and traffic objects in real-time.
               <br />Your camera feed is processed locally and never leaves your device.
             </p>
             {cameraState === 'requesting' ? (
@@ -111,6 +136,18 @@ const App: React.FC = () => {
                 <button className="btn btn-primary btn-lg" onClick={requestCamera}>
                   Grant Camera Access
                 </button>
+                <div className="phone-connect">
+                  <div className="phone-connect-header">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                      <line x1="12" y1="18" x2="12.01" y2="18"/>
+                    </svg>
+                    <span>Stream from your phone</span>
+                  </div>
+                  <p className="phone-connect-desc">
+                    Open <code>http://{lanIp}/mobile.html</code> on your phone's browser
+                  </p>
+                </div>
               </div>
             )}
             <div className="permission-footer">
@@ -130,6 +167,8 @@ const App: React.FC = () => {
 
   // ── Main detection UI ───────────────────────────────────────────────
   const modelDisplayName = modelsData?.current?.toUpperCase() || 'YOLOv8';
+  const activeCamName = availableCameras.find(c => c.id === activeCameraId)?.name || 'Local Camera';
+  const isRemote = activeCameraId !== 'local';
 
   return (
     <div className="app">
@@ -140,11 +179,20 @@ const App: React.FC = () => {
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
               <circle cx="12" cy="13" r="4" />
             </svg>
-            <h1>Object Detection</h1>
+            <h1>Traffic Object Detection System</h1>
           </div>
-          <span className="header-subtitle">Real-Time Camera Detection</span>
+          <span className="header-subtitle">Real-Time Vehicle Detection and Traffic Analysis for Nepal</span>
         </div>
         <div className="header-right">
+          {/* Cameras button → opens grid modal */}
+          <button className="cam-selector-btn" onClick={() => setShowGrid(true)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            <span>Cameras</span>
+            {remoteCount > 0 && <span className="cam-badge">{remoteCount}</span>}
+          </button>
           <div className={`connection-badge ${connected ? 'online' : 'offline'}`}>
             <span className="badge-dot" />
             {connected ? 'Connected' : 'Connecting...'}
@@ -163,20 +211,36 @@ const App: React.FC = () => {
             onConfig={handleConfig}
             onReset={handleReset}
             onExport={handleExportCSV}
-            currentConf={0.35}
+            currentConf={initialConf}
             modelsData={modelsData}
             onModelSwitch={switchModel}
           />
           <CongestionBadge detectionData={detectionData} />
           <CategoryBreakdown detectionData={detectionData} />
+          <div className="phone-connect-card">
+            <div className="panel-header">
+              <h3>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                  <line x1="12" y1="18" x2="12.01" y2="18"/>
+                </svg>
+                Phone Stream
+              </h3>
+            </div>
+            <div className="phone-connect-body">
+              <p>Open on your phone:</p>
+              <code className="phone-url">http://{lanIp}/mobile.html</code>
+            </div>
+          </div>
         </aside>
 
         <main className="main-content">
           <DetectionView
-            videoElement={videoElement}
-            frameCanvas={frameCanvas}
+            videoElement={activeCameraId === 'local' ? videoElement : null}
+            frameCanvas={activeCameraId === 'local' ? frameCanvas : null}
             detecting={detecting}
             detectionData={detectionData}
+            remoteFrameUrl={activeCameraId !== 'local' ? remoteFrameUrl : null}
           />
           <TrendChart detectionData={detectionData} />
         </main>
@@ -189,10 +253,20 @@ const App: React.FC = () => {
       </div>
 
       <footer className="app-footer">
-        <span>Powered by {modelDisplayName} | 80 COCO Classes</span>
+        <span>Powered by {modelDisplayName} | Traffic Classes</span>
         <span className="footer-sep">|</span>
-        <span>Camera capture at {detectionData?.fps.toFixed(1) ?? '—'} FPS</span>
+        <span>{isRemote ? '[Phone]' : '[Cam]'} {activeCamName} at {detectionData?.fps.toFixed(1) ?? '--'} FPS</span>
       </footer>
+
+      {/* Camera Grid Modal */}
+      {showGrid && (
+        <CameraGrid
+          cameras={availableCameras}
+          activeCameraId={activeCameraId}
+          onSelect={handleSwitchCamera}
+          onClose={() => setShowGrid(false)}
+        />
+      )}
     </div>
   );
 };
