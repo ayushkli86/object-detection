@@ -82,14 +82,92 @@ COCO_CLASSES = [
     'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
 ]
 
-# Predefined class subsets
-CLASS_SUBSETS = {
+# Predefined class subsets for COCO model (used as fallback)
+CLASS_SUBSETS_COCO = {
     "all": list(range(80)),
     "traffic": [0, 1, 2, 3, 5, 6, 7, 9, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25],
     "vehicles": [1, 2, 3, 5, 6, 7],
     "people_animals": [0, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
     "objects": [24, 25, 26, 27, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 71, 72, 73, 74, 75, 76, 77, 78, 79],
 }
+
+
+def build_class_subsets(class_names: Dict[int, str]) -> Dict[str, List[int]]:
+    """Build class subsets dynamically based on the model's class names.
+    
+    This ensures subsets work correctly regardless of which model is loaded
+    (COCO 80 classes, Open Images 601 classes, etc.).
+    """
+    # Keywords that identify classes in each category
+    traffic_kw = {
+        'car', 'motorcycle', 'motorbike', 'bicycle', 'bike', 'bus', 'truck', 'train',
+        'boat', 'airplane', 'vehicle', 'traffic light', 'stop sign', 'fire hydrant',
+        'parking meter', 'tractor', 'auto', 'rickshaw', 'tempo',
+    }
+    vehicles_kw = {
+        'car', 'motorcycle', 'motorbike', 'bicycle', 'bike', 'bus', 'truck',
+        'train', 'boat', 'airplane', 'vehicle', 'tractor', 'auto', 'rickshaw', 'tempo',
+    }
+    people_kw = {
+        'person', 'man', 'woman', 'child', 'boy', 'girl', 'pedestrian',
+    }
+    animals_kw = {
+        'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear',
+        'zebra', 'giraffe', 'chicken', 'rabbit', 'animal',
+    }
+    # Furniture/electronics/daily objects — anything not traffic/people/animals
+    object_kw = {
+        'chair', 'table', 'desk', 'couch', 'sofa', 'bed', 'shelf', 'cabinet',
+        'book', 'pen', 'pencil', 'notebook', 'paper', 'scissors', 'ruler',
+        'laptop', 'computer', 'keyboard', 'mouse', 'monitor', 'cell phone',
+        'telephone', 'tv', 'television', 'remote', 'printer',
+        'bottle', 'cup', 'glass', 'bowl', 'plate', 'fork', 'knife', 'spoon',
+        'refrigerator', 'microwave', 'oven', 'toaster', 'sink',
+        'backpack', 'handbag', 'suitcase', 'umbrella', 'wallet',
+        'hat', 'shoe', 'shirt', 'jacket', 'pants',
+        'clock', 'vase', 'hammer', 'screwdriver',
+    }
+
+    subsets: Dict[str, List[int]] = {"all": list(class_names.keys())}
+    seen: Dict[str, set] = {k: set() for k in ("traffic", "vehicles", "people_animals", "animals", "objects")}
+    for idx, name in class_names.items():
+        name_lower = name.lower().strip()
+        if name_lower in traffic_kw:
+            if idx not in seen["traffic"]:
+                subsets.setdefault("traffic", []).append(idx)
+                seen["traffic"].add(idx)
+            if idx not in seen["vehicles"]:
+                subsets.setdefault("vehicles", []).append(idx)
+                seen["vehicles"].add(idx)
+        if name_lower in vehicles_kw and idx not in seen["vehicles"]:
+            subsets.setdefault("vehicles", []).append(idx)
+            seen["vehicles"].add(idx)
+        if name_lower in people_kw and idx not in seen["people_animals"]:
+            subsets.setdefault("people_animals", []).append(idx)
+            seen["people_animals"].add(idx)
+        if name_lower in animals_kw:
+            if idx not in seen["people_animals"]:
+                subsets.setdefault("people_animals", []).append(idx)
+                seen["people_animals"].add(idx)
+            if idx not in seen["animals"]:
+                subsets.setdefault("animals", []).append(idx)
+                seen["animals"].add(idx)
+        if name_lower in object_kw or (
+            # catch-all: any object not in traffic/people/animals
+            name_lower not in traffic_kw
+            and name_lower not in people_kw
+            and name_lower not in animals_kw
+            and any(kw in name_lower for kw in ['object', 'item', 'thing', 'furniture', 'electronic', 'food', 'fruit', 'vegetable', 'clothing', 'sport'])
+        ):
+            if idx not in seen["objects"]:
+                subsets.setdefault("objects", []).append(idx)
+                seen["objects"].add(idx)
+
+    # Always ensure these subsets exist even if empty
+    for key in ("traffic", "vehicles", "people_animals", "animals", "objects"):
+        subsets.setdefault(key, [])
+
+    return subsets
 
 # Available model sizes (YOLOv8)
 AVAILABLE_MODELS = {
@@ -233,10 +311,8 @@ class ObjectDetector:
 
         # ── Class filtering ────────────────────────────────────────────
         self._class_subset_name = class_subset
-        if class_subset in CLASS_SUBSETS:
-            self._filtered_classes = CLASS_SUBSETS[class_subset]
-        else:
-            self._filtered_classes = list(range(80))
+        self._class_subsets = {}  # Built after model loads below
+        self._filtered_classes = list(range(80))  # temporary, rebuilt after model load
         logger.info(f"Class filter: {class_subset} ({len(self._filtered_classes)} classes)")
 
         # Resolve tracker config
@@ -269,6 +345,15 @@ class ObjectDetector:
         else:
             self.classes = {i: name for i, name in enumerate(COCO_CLASSES)}
         logger.info(f"Loaded {len(self.classes)} classes")
+
+        # ── Build dynamic class subsets for this model ───────────────────
+        self._class_subsets = build_class_subsets(self.classes)
+        logger.info(f"Built {len(self._class_subsets)} class subsets: {list(self._class_subsets.keys())}")
+        if class_subset in self._class_subsets:
+            self._filtered_classes = self._class_subsets[class_subset]
+        else:
+            self._filtered_classes = list(self.classes.keys())
+        logger.info(f"Class filter: {class_subset} ({len(self._filtered_classes)} classes)")
 
         # Performance tracking
         self.fps = 0.0
@@ -332,6 +417,15 @@ class ObjectDetector:
 
             if hasattr(self.model, 'names'):
                 self.classes = self.model.names
+            else:
+                self.classes = {i: name for i, name in enumerate(COCO_CLASSES)}
+
+            # Rebuild class subsets for new model
+            self._class_subsets = build_class_subsets(self.classes)
+            if self._class_subset_name in self._class_subsets:
+                self._filtered_classes = self._class_subsets[self._class_subset_name]
+            else:
+                self._filtered_classes = list(self.classes.keys())
 
             # Reset tracking state since model changed
             self._kalman_filters.clear()
@@ -344,15 +438,17 @@ class ObjectDetector:
 
     # ── Class filtering ────────────────────────────────────────────────
     def set_class_filter(self, subset: str):
-        """Change the active class filter."""
-        if subset in CLASS_SUBSETS:
+        """Change the active class filter using dynamic model-aware subsets."""
+        if subset in self._class_subsets:
             self._class_subset_name = subset
-            self._filtered_classes = CLASS_SUBSETS[subset]
+            self._filtered_classes = self._class_subsets[subset]
             logger.info(f"Class filter: {subset} ({len(self._filtered_classes)} classes)")
         elif subset == "all":
             self._class_subset_name = "all"
-            self._filtered_classes = list(range(80))
-            logger.info("Class filter: all (traffic classes)")
+            self._filtered_classes = list(self.classes.keys())
+            logger.info(f"Class filter: all ({len(self._filtered_classes)} classes)")
+        else:
+            logger.warning(f"Unknown class subset '{subset}' for current model")
 
     # ── Zone management ────────────────────────────────────────────────
     def add_zone(self, name: str, points: List[List[int]]) -> DetectionZone:
@@ -483,7 +579,7 @@ class ObjectDetector:
             imgsz=self.imgsz,
         )
         # Apply class filtering if not "all"
-        if self._class_subset_name != "all" and len(self._filtered_classes) < 80:
+        if self._class_subset_name != "all" and len(self._filtered_classes) < len(self.classes):
             kwargs["classes"] = self._filtered_classes
 
         results = self.model.track(frame, **kwargs)

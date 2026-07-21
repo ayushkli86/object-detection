@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from detector import ObjectDetector, AVAILABLE_MODELS, CLASS_SUBSETS
+from detector import ObjectDetector, AVAILABLE_MODELS, build_class_subsets
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -238,7 +238,7 @@ async def list_classes():
         "total": len(detector.classes),
         "classes": detector.classes,
         "subsets": {k: {"count": len(v), "names": [detector.classes.get(i, str(i)) for i in v[:20]]}
-                    for k, v in CLASS_SUBSETS.items()},
+                    for k, v in detector._class_subsets.items()},
         "active_filter": detector._class_subset_name,
     }
 

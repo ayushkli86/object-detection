@@ -5,32 +5,33 @@ interface Props {
   detectionData: DetectionData | null;
 }
 
-const ITEM_COLORS: Record<string, string> = {
-  person: '#3BB8EB',
-  car: '#56CF63',
-  truck: '#56CF63',
-  bus: '#56CF63',
-  motorcycle: '#F79646',
-  bicycle: '#F79646',
-  cat: '#C850C0',
-  dog: '#C850C0',
-  bird: '#C850C0',
-  horse: '#C850C0',
-  chair: '#82A2E6',
-  couch: '#82A2E6',
-  bed: '#82A2E6',
-  bottle: '#FF8282',
-  cup: '#FF8282',
-  laptop: '#FFC882',
-  'cell phone': '#FFC882',
-  tv: '#C8C8C8',
-  book: '#FFFF82',
-  clock: '#FFFF82',
-  vase: '#FFFF82',
+/**
+ * Dynamic object counter — works with ANY model (COCO 80, Open Images 601, etc.)
+ * Colors are generated deterministically from class names, not hardcoded.
+ */
+
+// Known category colors for common objects (used as hints, not restrictions)
+const KNOWN_COLORS: Record<string, string> = {
+  person: '#3BB8EB', car: '#56CF63', truck: '#56CF63', bus: '#56CF63',
+  motorcycle: '#F79646', bicycle: '#F79646',
+  cat: '#C850C0', dog: '#C850C0', bird: '#C850C0', horse: '#C850C0',
+  cow: '#C850C0', sheep: '#C850C0',
+  chair: '#82A2E6', couch: '#82A2E6', bed: '#82A2E6', table: '#82A2E6',
+  bottle: '#FF8282', cup: '#FF8282', bowl: '#FF8282',
+  laptop: '#FFC882', 'cell phone': '#FFC882', tv: '#FFC882', keyboard: '#FFC882',
+  book: '#FFFF82', clock: '#FFFF82', vase: '#FFFF82',
+  backpack: '#F79646', 'handbag': '#F79646', umbrella: '#4ecdc4',
+  'traffic light': '#e85454', 'stop sign': '#e85454',
 };
 
 function getColor(name: string): string {
-  return ITEM_COLORS[name] || `hsl(${name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360}, 65%, 55%)`;
+  if (KNOWN_COLORS[name]) return KNOWN_COLORS[name];
+  // Deterministic color from name hash — works for ANY class name
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  }
+  return `hsl(${Math.abs(hash) % 360}, 65%, 55%)`;
 }
 
 const ObjectCounter: React.FC<Props> = ({ detectionData }) => {

@@ -51,16 +51,16 @@ const CameraGrid: React.FC<Props> = ({ cameras, activeCameraId, onSelect, onClos
 
           // Draw detection boxes
           const detections = camData.detections || [];
-          const colors: Record<string, string> = {
-            person: '#4ade80', car: '#3b82f6', truck: '#2563eb', bus: '#06b6d4',
-            motorcycle: '#8b5cf6', bicycle: '#a78bfa', 'traffic light': '#ef4444',
-            'stop sign': '#dc2626', cat: '#f59e0b', dog: '#d97706',
+          const getDetColor = (name: string) => {
+            let h = 0;
+            for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+            return `hsl(${Math.abs(h) % 360}, 70%, 55%)`;
           };
           const fallbackColors = ['#3b82f6', '#4ade80', '#f59e0b', '#8b5cf6'];
 
           for (const det of detections) {
             const [x1, y1, x2, y2] = det.bbox;
-            const color = colors[det.class_name] || fallbackColors[det.class_id % fallbackColors.length];
+            const color = getDetColor(det.class_name);
             const bx = x1 * canvas.width;
             const by = y1 * canvas.height;
             const bw = (x2 - x1) * canvas.width;

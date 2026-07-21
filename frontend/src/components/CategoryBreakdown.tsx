@@ -5,74 +5,134 @@ interface Props {
   detectionData: DetectionData | null;
 }
 
-interface CategoryGroup {
-  name: string;
-  label: string;
-  color: string;
-  classes: string[];
-}
+/**
+ * Dynamic category breakdown — works with ANY model (COCO 80, Open Images 601, etc.)
+ * Categories are built from the actual class names in detection data,
+ * not hardcoded COCO names.
+ */
 
-const CATEGORIES: CategoryGroup[] = [
+// Keywords to classify detected objects into categories
+const CATEGORY_RULES: { name: string; label: string; color: string; keywords: string[] }[] = [
   {
-    name: 'private',
-    label: 'Private Vehicles',
+    name: 'vehicles',
+    label: 'Vehicles',
     color: '#3b82f6',
-    classes: ['car', 'motorcycle', 'bicycle'],
+    keywords: ['car', 'motorcycle', 'motorbike', 'bicycle', 'bike', 'bus', 'truck', 'train', 'boat', 'airplane', 'vehicle', 'tractor', 'auto', 'rickshaw', 'tempo', 'van', 'suv', 'sedan', 'taxi', 'ambulance', 'fire truck', 'police'],
   },
   {
-    name: 'public',
-    label: 'Public Transport',
-    color: '#4ecdc4',
-    classes: ['bus', 'truck', 'train'],
-  },
-  {
-    name: 'people_animals',
-    label: 'People & Animals',
+    name: 'people',
+    label: 'People',
     color: '#22c55e',
-    classes: ['person', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe'],
+    keywords: ['person', 'man', 'woman', 'child', 'boy', 'girl', 'pedestrian', 'rider'],
   },
   {
-    name: 'traffic',
+    name: 'animals',
+    label: 'Animals',
+    color: '#c850c0',
+    keywords: ['dog', 'cat', 'bird', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'chicken', 'rabbit', 'animal', 'pigeon', 'monkey'],
+  },
+  {
+    name: 'infrastructure',
     label: 'Traffic Infrastructure',
     color: '#e85454',
-    classes: ['traffic light', 'stop sign', 'fire hydrant', 'parking meter'],
+    keywords: ['traffic light', 'stop sign', 'fire hydrant', 'parking meter', 'traffic sign', 'street sign', 'cone', 'barrier', 'zebra crossing', 'speed bump', 'crosswalk'],
   },
   {
-    name: 'objects',
-    label: 'Other Objects',
-    color: '#9b7bd4',
-    classes: [], // catch-all
+    name: 'furniture',
+    label: 'Furniture',
+    color: '#82A2E6',
+    keywords: ['chair', 'table', 'desk', 'couch', 'sofa', 'bed', 'shelf', 'cabinet', 'bench', 'stool', 'wardrobe'],
+  },
+  {
+    name: 'electronics',
+    label: 'Electronics',
+    color: '#FFC882',
+    keywords: ['laptop', 'computer', 'keyboard', 'mouse', 'monitor', 'cell phone', 'telephone', 'tv', 'television', 'remote', 'printer', 'screen', 'desktop', 'tablet', 'camera', 'speaker'],
+  },
+  {
+    name: 'kitchen',
+    label: 'Kitchen',
+    color: '#FF8282',
+    keywords: ['bottle', 'cup', 'glass', 'bowl', 'plate', 'fork', 'knife', 'spoon', 'refrigerator', 'microwave', 'oven', 'toaster', 'sink', 'pot', 'pan'],
+  },
+  {
+    name: 'personal',
+    label: 'Personal Items',
+    color: '#F79646',
+    keywords: ['backpack', 'handbag', 'suitcase', 'umbrella', 'wallet', 'purse', 'bag', 'hat', 'shoe', 'boot', 'sandal'],
+  },
+  {
+    name: 'stationery',
+    label: 'Stationery',
+    color: '#FFFF82',
+    keywords: ['book', 'pen', 'pencil', 'notebook', 'paper', 'scissors', 'ruler', 'marker', 'eraser', 'folder', 'binder'],
+  },
+  {
+    name: 'food',
+    label: 'Food',
+    color: '#6bcb77',
+    keywords: ['banana', 'apple', 'orange', 'sandwich', 'pizza', 'cake', 'donut', 'hot dog', 'broccoli', 'carrot', 'fruit', 'vegetable', 'bread'],
+  },
+  {
+    name: 'sports',
+    label: 'Sports',
+    color: '#4ecdc4',
+    keywords: ['sports ball', 'baseball', 'glove', 'skateboard', 'surfboard', 'tennis racket', 'frisbee', 'skis', 'snowboard', 'kite', 'racket'],
+  },
+  {
+    name: 'clothing',
+    label: 'Clothing',
+    color: '#a78bfa',
+    keywords: ['shirt', 'jacket', 'pants', 'dress', 'hat', 'shoe', 'tie', 'coat', 'clothing', 'clothes', 'helmet'],
+  },
+  {
+    name: 'tools',
+    label: 'Tools',
+    color: '#f59e0b',
+    keywords: ['hammer', 'screwdriver', 'wrench', 'drill', 'tool', 'saw'],
   },
 ];
 
+function classifyObject(name: string): { label: string; color: string } {
+  const lower = name.toLowerCase().trim();
+  for (const rule of CATEGORY_RULES) {
+    for (const kw of rule.keywords) {
+      if (lower === kw || lower.includes(kw) || kw.includes(lower)) {
+        return { label: rule.label, color: rule.color };
+      }
+    }
+  }
+  return { label: 'Other Objects', color: '#64748b' };
+}
+
 const CategoryBreakdown: React.FC<Props> = ({ detectionData }) => {
-  const totals = useMemo(() => {
-    if (!detectionData?.session_counts) return [];
+  const { totals, grandTotal } = useMemo(() => {
+    if (!detectionData?.session_counts) return { totals: [], grandTotal: 0 };
     const counts = detectionData.session_counts;
-    const matched = new Set<string>();
 
-    const groups = CATEGORIES.map((cat) => {
-      const entries = cat.classes
-        .map((cls) => [cls, counts[cls] || 0] as const)
-        .filter(([, v]) => v > 0);
-      entries.forEach(([k]) => matched.add(k));
-      const total = entries.reduce((sum, [, v]) => sum + v, 0);
-      return { ...cat, total, entries };
-    });
+    // Dynamically group all detected classes into categories
+    const categoryMap = new Map<string, { label: string; color: string; total: number; entries: [string, number][] }>();
 
-    const unmatched = Object.entries(counts)
-      .filter(([k]) => !matched.has(k))
-      .reduce((sum, [, v]) => sum + v, 0);
-    if (unmatched > 0) {
-      const objGroup = groups.find((g) => g.name === 'objects')!;
-      objGroup.total = unmatched;
+    for (const [className, count] of Object.entries(counts)) {
+      if (count <= 0) continue;
+      const { label, color } = classifyObject(className);
+      const key = label;
+      if (!categoryMap.has(key)) {
+        categoryMap.set(key, { label, color, total: 0, entries: [] });
+      }
+      const cat = categoryMap.get(key)!;
+      cat.total += count;
+      cat.entries.push([className, count]);
     }
 
-    return groups.filter((g) => g.total > 0);
+    const sorted = Array.from(categoryMap.values())
+      .sort((a, b) => b.total - a.total);
+
+    const grand = sorted.reduce((sum, t) => sum + t.total, 0);
+    return { totals: sorted, grandTotal: grand };
   }, [detectionData?.session_counts]);
 
   const maxTotal = Math.max(1, ...totals.map((t) => t.total));
-  const grandTotal = totals.reduce((sum, t) => sum + t.total, 0);
 
   return (
     <div className="category-breakdown">
@@ -102,7 +162,7 @@ const CategoryBreakdown: React.FC<Props> = ({ detectionData }) => {
             const barWidth = (cat.total / maxTotal) * 100;
 
             return (
-              <div key={cat.name} className="category-item">
+              <div key={cat.label} className="category-item">
                 <div className="category-top">
                   <span className="category-dot" style={{ backgroundColor: cat.color }} />
                   <span className="category-name">{cat.label}</span>
@@ -117,11 +177,16 @@ const CategoryBreakdown: React.FC<Props> = ({ detectionData }) => {
                 </div>
                 {cat.entries.length > 0 && (
                   <div className="category-classes">
-                    {cat.entries.map(([cls, cnt]) => (
+                    {cat.entries.slice(0, 8).map(([cls, cnt]) => (
                       <span key={cls} className="category-class-chip">
                         {cls}: {cnt}
                       </span>
                     ))}
+                    {cat.entries.length > 8 && (
+                      <span className="category-class-chip" style={{ opacity: 0.5 }}>
+                        +{cat.entries.length - 8} more
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
