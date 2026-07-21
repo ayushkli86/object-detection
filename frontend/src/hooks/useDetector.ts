@@ -2,7 +2,18 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { DetectionData, DetectorStats, ModelsResponse, CameraSource } from '../types';
 
 const API_BASE = `/api`;
-const FRAME_INTERVAL_MS = 100;
+
+/**
+ * FPS Optimization:
+ * - captureCanvas is 640x480 (matches YOLO imgsz, smaller payload)
+ * - Lightweight 8-point pixel hash instead of full getImageData scan
+ * - JPEG quality 0.7 (smaller payload, barely noticeable)
+ * - Fire-and-forget frames (don't await each response)
+ * - requestAnimationFrame scheduling for smoother frame pacing
+ */
+const CAPTURE_W = 640;
+const CAPTURE_H = 480;
+const JPEG_QUALITY = 0.7;
 
 export type CameraState = 'idle' | 'requesting' | 'active' | 'error';
 
@@ -45,7 +56,7 @@ export function useDetector(): UseDetectorReturn {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const detectingRef = useRef(false);
-  const frameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frameTimerRef = useRef<number>(0);
   const prevFrameHashRef = useRef<number>(0);
   const activeCameraIdRef = useRef<string>('local');
   const remotePollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,8 +85,8 @@ export function useDetector(): UseDetectorReturn {
       await video.play();
 
       const canvas = document.createElement('canvas');
-      canvas.width = 960;
-      canvas.height = 720;
+      canvas.width = CAPTURE_W;
+      canvas.height = CAPTURE_H;
 
       streamRef.current = stream;
       videoRef.current = video;
@@ -112,47 +123,66 @@ export function useDetector(): UseDetectorReturn {
     setCameraState('idle');
   }, []);
 
-  // ── Local camera frame loop ──────────────────────────────────────────
+  // ── Local camera frame loop (optimized for FPS) ─────────────────────
+  const inFlightRef = useRef(false);  // throttle: skip if previous frame still in flight
+
   const sendFrameLoop = useCallback(async () => {
     if (!detectingRef.current || activeCameraIdRef.current !== 'local') return;
+    if (inFlightRef.current) {  // don't pile up requests
+      frameTimerRef.current = requestAnimationFrame(sendFrameLoop);
+      return;
+    }
     const video = videoRef.current;
     const canvas = captureCanvasRef.current;
     if (!video || !canvas) return;
 
     try {
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: false });
       if (!ctx) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // ── Lightweight 8-point hash (replaces full getImageData scan) ────
+      // Sample 8 pixels at fixed positions — fast, avoids main-thread stall
+      const pts = [
+        [0, 0], [canvas.width >> 1, 0], [canvas.width - 1, 0],
+        [0, canvas.height - 1], [canvas.width - 1, canvas.height - 1],
+        [canvas.width >> 1, canvas.height >> 1],
+        [canvas.width >> 2, canvas.height >> 2],
+        [(canvas.width * 3) >> 2, (canvas.height * 3) >> 2],
+      ];
       let hash = 0;
-      for (let i = 0; i < imgData.data.length; i += 64) {
-        hash = ((hash << 5) - hash + imgData.data[i]) | 0;
+      for (const [x, y] of pts) {
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        hash = ((hash << 5) - hash + d[0] + (d[1] << 1) + (d[2] << 2)) | 0;
       }
       if (hash === prevFrameHashRef.current) {
-        frameTimerRef.current = setTimeout(sendFrameLoop, FRAME_INTERVAL_MS / 2);
+        frameTimerRef.current = requestAnimationFrame(sendFrameLoop);
         return;
       }
       prevFrameHashRef.current = hash;
 
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      const res = await fetch(`${API_BASE}/detect`, {
+      // ── Encode + send (fire-and-forget) ─────────────────────────────
+      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      inFlightRef.current = true;
+      fetch(`${API_BASE}/detect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrl }),
-      });
-      if (res.ok) {
-        const result: DetectionData = await res.json();
-        if (detectingRef.current && activeCameraIdRef.current === 'local' && result.type === 'detection') {
-          setDetectionData(result);
-        }
-      }
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(result => {
+          if (result && detectingRef.current && activeCameraIdRef.current === 'local' && result.type === 'detection') {
+            setDetectionData(result);
+          }
+        })
+        .catch(() => {})
+        .finally(() => { inFlightRef.current = false; });
     } catch (e) {
-      console.warn('Detection request failed:', e);
+      inFlightRef.current = false;
     }
 
     if (detectingRef.current && activeCameraIdRef.current === 'local') {
-      frameTimerRef.current = setTimeout(sendFrameLoop, FRAME_INTERVAL_MS);
+      frameTimerRef.current = requestAnimationFrame(sendFrameLoop);
     }
   }, []);
 
@@ -206,7 +236,7 @@ export function useDetector(): UseDetectorReturn {
       console.warn('Remote frame poll failed:', e);
     }
     if (detectingRef.current && activeCameraIdRef.current !== 'local') {
-      remotePollRef.current = setTimeout(startRemotePoll, FRAME_INTERVAL_MS);
+      remotePollRef.current = setTimeout(startRemotePoll, 100);
     }
   }, []);
 
@@ -225,8 +255,8 @@ export function useDetector(): UseDetectorReturn {
       // Stop old source
       if (wasDetecting && wasLocal) {
         if (frameTimerRef.current) {
-          clearTimeout(frameTimerRef.current);
-          frameTimerRef.current = null;
+          cancelAnimationFrame(frameTimerRef.current);
+          frameTimerRef.current = 0;
         }
       }
       if (wasDetecting && !wasLocal) {
@@ -273,9 +303,10 @@ export function useDetector(): UseDetectorReturn {
     detectingRef.current = false;
     setDetecting(false);
     if (frameTimerRef.current) {
-      clearTimeout(frameTimerRef.current);
-      frameTimerRef.current = null;
+      cancelAnimationFrame(frameTimerRef.current);
+      frameTimerRef.current = 0;
     }
+    inFlightRef.current = false;
     stopRemotePoll();
     setDetectionData(null);
   }, [stopRemotePoll]);
