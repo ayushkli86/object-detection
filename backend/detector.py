@@ -94,6 +94,7 @@ CLASS_SUBSETS = {
 # Available model sizes (YOLOv8)
 AVAILABLE_MODELS = {
     "yolov8l": {"file": "yolov8l.pt", "params": "43.7M", "map": 52.9, "speed_ms": 2.39},
+    "yolov8l-oiv7": {"file": "yolov8l-oiv7.pt", "params": "44.1M", "map": 34.9, "speed_ms": 2.43, "description": "601 classes (traffic + daily objects)", "finetuned": True},
 }
 
 

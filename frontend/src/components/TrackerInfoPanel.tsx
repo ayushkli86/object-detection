@@ -65,6 +65,11 @@ const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
           <span className="tracker-model-detail">
             Input: {stats.imgsz || 640}px | {stats.active_classes || 80} classes
           </span>
+          {stats.model_info?.description && (
+            <span className="tracker-model-detail" style={{color: '#22c55e'}}>
+              {stats.model_info.description}
+            </span>
+          )}
         </div>
 
         {/* Stability meter */}

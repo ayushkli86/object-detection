@@ -50,6 +50,8 @@ export interface ModelInfo {
   params: string;
   map: number;
   speed_ms: number;
+  description?: string;
+  finetuned?: boolean;
 }
 
 /** Available models */

@@ -113,6 +113,12 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
             <span className="device-label">mAP@50-95</span>
             <span className="device-value">{stats.model_info?.map || '—'}</span>
           </div>
+          {stats.model_info?.description && (
+            <div className="device-item">
+              <span className="device-label">Classes</span>
+              <span className="device-value" style={{fontSize: '0.7rem'}}>{stats.model_info.description}</span>
+            </div>
+          )}
           <div className="device-item">
             <span className="device-label">Confidence</span>
             <span className="device-value">{stats.conf_threshold.toFixed(2)}</span>

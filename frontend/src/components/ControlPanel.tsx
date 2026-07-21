@@ -113,16 +113,20 @@ const ControlPanel: React.FC<Props> = ({
             <span className="control-value">{selectedModel}</span>
           </label>
           <div className="model-selector">
-            {modelsData && Object.entries(modelsData.available).map(([name, info]) => (
+            {modelsData && Object.entries(modelsData.available).map(([name, info]: [string, any]) => (
               <button
                 key={name}
-                className={`model-btn ${selectedModel === name ? 'active' : ''} ${switching ? 'switching' : ''}`}
+                className={`model-btn ${selectedModel === name ? 'active' : ''} ${switching ? 'switching' : ''} ${info.finetuned ? 'finetuned' : ''}`}
                 onClick={() => handleModelChange(name)}
                 disabled={switching}
-                title={`${info.params} params | mAP ${info.map} | ~${info.speed_ms}ms`}
+                title={`${info.params} params | mAP ${info.map} | ~${info.speed_ms}ms${info.description ? ' | ' + info.description : ''}`}
               >
                 <span className="model-btn-name">{name.replace('yolov8', 'v8')}</span>
-                <span className="model-btn-info">mAP {info.map}</span>
+                <span className="model-btn-info">
+                  {info.finetuned && <span className="finetuned-badge">FINETUNED</span>}
+                  mAP {info.map}
+                </span>
+                {info.description && <span className="model-btn-desc">{info.description}</span>}
               </button>
             ))}
           </div>
