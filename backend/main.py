@@ -48,7 +48,7 @@ MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(os.path.dirname(os.path.a
 IMGSZ = int(os.environ.get("IMGSZ", "640"))
 CLASS_FILTER = os.environ.get("CLASS_FILTER", "all")
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
-RATE_LIMIT_DETECT_PER_SEC = int(os.environ.get("RATE_LIMIT_DETECT", "30"))
+RATE_LIMIT_DETECT_PER_SEC = int(os.environ.get("RATE_LIMIT_DETECT", "120"))
 
 
 # ---------------------------------------------------------------------------
@@ -147,26 +147,42 @@ async def lifespan(app: FastAPI):
     if MODEL_PATH and os.path.exists(MODEL_PATH):
         resolved_path = MODEL_PATH
     elif MODELS_DIR:
-        for candidate in ["yolov8l.pt"]:
+        for candidate in ["besst.pt"]:
             full = os.path.join(MODELS_DIR, candidate)
             if os.path.isfile(full):
                 resolved_path = full
                 break
 
     if not resolved_path:
-        resolved_path = "yolov8l.pt"
+        resolved_path = "besst.pt"
         logger.info(f"No local model found. YOLO will auto-download: {resolved_path}")
 
-    detector = ObjectDetector(
-        model_path=resolved_path,
-        conf_threshold=0.35,
-        iou_threshold=0.45,
-        device="auto",
-        tracker=TRACKER,
-        models_dir=MODELS_DIR,
-        imgsz=IMGSZ,
-        class_subset=CLASS_FILTER,
-    )
+    # Try GPU first, fall back to CPU
+    preferred_device = os.environ.get("DEVICE", "cuda:0")
+    try:
+        detector = ObjectDetector(
+            model_path=resolved_path,
+            conf_threshold=0.35,
+            iou_threshold=0.45,
+            device=preferred_device,
+            tracker=TRACKER,
+            models_dir=MODELS_DIR,
+            imgsz=IMGSZ,
+            class_subset=CLASS_FILTER,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to use device '{preferred_device}': {e}")
+        logger.info("Falling back to CPU...")
+        detector = ObjectDetector(
+            model_path=resolved_path,
+            conf_threshold=0.35,
+            iou_threshold=0.45,
+            device="cpu",
+            tracker=TRACKER,
+            models_dir=MODELS_DIR,
+            imgsz=IMGSZ,
+            class_subset=CLASS_FILTER,
+        )
     logger.info(f"Detector initialized: {detector.model_name} on {detector.device} (imgsz={IMGSZ})")
 
     yield
@@ -198,7 +214,7 @@ app.add_middleware(
 # Global state
 # ---------------------------------------------------------------------------
 detector: Optional[ObjectDetector] = None
-current_fps = 15
+current_fps = 30
 detector_lock = asyncio.Lock()
 
 
@@ -227,7 +243,9 @@ async def stats():
     if detector is None:
         raise HTTPException(status_code=503, detail="Detector not initialized")
     async with detector_lock:
-        return detector.get_stats()
+        stats = detector.get_stats()
+        stats["max_fps"] = current_fps
+        return stats
 
 
 @app.get("/api/classes")
@@ -278,7 +296,7 @@ async def update_config(config: ConfigUpdate):
 
         if config.max_fps is not None:
             global current_fps
-            current_fps = max(1, min(60, config.max_fps))
+            current_fps = max(1, min(120, config.max_fps))
             changes.append(f"max_fps -> {current_fps}")
 
         if config.tracker is not None:
@@ -340,17 +358,32 @@ async def reset_counts():
     return {"status": "ok", "message": "Session counts reset"}
 
 
+_last_frame_time = 0.0  # for frame skipping
+_last_detection_result: dict = {}  # cached result for skipped frames
+
 @app.post("/api/detect")
 async def detect_frame(request: Request):
     """
     Accept a base64 JPEG frame from the browser camera, run detection,
     return detection metadata.
     """
+    global _last_frame_time, _last_detection_result
     if detector is None:
         raise HTTPException(status_code=503, detail="Detector not initialized")
 
+    # FPS cap enforcement — return cached result instead of 429
+    now = time.time()
+    if current_fps > 0 and _last_frame_time > 0:
+        min_interval = 1.0 / current_fps
+        elapsed = now - _last_frame_time
+        if elapsed < min_interval and _last_detection_result:
+            return _last_detection_result
+
     if not await _rate_limiter.allow():
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 30 requests/sec.")
+        # Rate limited — return cached result instead of 429
+        if _last_detection_result:
+            return _last_detection_result
+        raise HTTPException(status_code=429, detail=f"Rate limit exceeded. Max {RATE_LIMIT_DETECT_PER_SEC} req/s.")
 
     async with detector_lock:
         body = await request.json()
@@ -377,7 +410,9 @@ async def detect_frame(request: Request):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         det_frame = detector.detect(frame_rgb)
 
-        return {
+        _last_frame_time = time.time()
+
+        _last_detection_result = {
             "type": "detection",
             "capture_mode": "camera",
             "detections": [
@@ -405,6 +440,8 @@ async def detect_frame(request: Request):
             "frame_height": det_frame.frame_height,
             "model": det_frame.model_name,
         }
+
+        return _last_detection_result
 
 
 # ---------------------------------------------------------------------------
@@ -535,7 +572,7 @@ async def get_remote_frame():
         "inference_ms": round(det.get("inference_ms", 0), 1),
         "frame_width": det.get("frame_width", 0),
         "frame_height": det.get("frame_height", 0),
-        "model": det.get("model", "yolov8l"),
+        "model": det.get("model", "besst"),
     }
 
 
@@ -680,7 +717,7 @@ else:
 if __name__ == "__main__":
     import uvicorn
     logger.info(f"Starting server on {HOST}:{PORT}")
-    logger.info(f"Model: {MODEL_PATH or 'yolov8l.pt (auto)'}")
+    logger.info(f"Model: {MODEL_PATH or 'besst.pt (auto)'}")
 
     uvicorn.run(
         "main:app",

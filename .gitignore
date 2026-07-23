@@ -40,3 +40,6 @@ screen_detections/
 screenshots/
 *.log
 Traffic_Object_Detection_Complete_Implementation_Guide.html
+
+# Training dataset (large - use Git LFS or external storage)
+dataset/

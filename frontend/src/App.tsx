@@ -18,6 +18,7 @@ const App: React.FC = () => {
     startDetection, stopDetection, detecting, detectionData, frameCanvas, remoteFrameUrl, lanIp,
     connected, fetchStats, fetchModels, switchModel,
     activeCameraId, setActiveCamera, availableCameras, fetchCameras,
+    updateFps, currentFps,
   } = useDetector();
 
   const [modelsData, setModelsData] = useState<ModelsResponse | null>(null);
@@ -214,6 +215,8 @@ const App: React.FC = () => {
             currentConf={initialConf}
             modelsData={modelsData}
             onModelSwitch={switchModel}
+            currentFps={currentFps}
+            onFpsChange={updateFps}
           />
           <CongestionBadge detectionData={detectionData} />
           <CategoryBreakdown detectionData={detectionData} />

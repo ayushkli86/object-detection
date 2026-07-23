@@ -34,7 +34,7 @@ const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
   const stabilityColor =
     stabilityPct >= 90 ? '#6b7c5e' : stabilityPct >= 70 ? '#b8860b' : '#8b3a3a';
 
-  const modelName = stats.model || 'yolov8l';
+  const modelName = stats.model || 'besst';
 
   return (
     <div className="tracker-info">
@@ -63,7 +63,7 @@ const TrackerInfoPanel: React.FC<Props> = ({ fetchStats }) => {
             {stats.model_info?.params || '—'} params | mAP {stats.model_info?.map || '—'}
           </span>
           <span className="tracker-model-detail">
-            Input: {stats.imgsz || 640}px | {stats.active_classes || 80} classes
+            Input: {stats.imgsz || 640}px
           </span>
           {stats.model_info?.description && (
             <span className="tracker-model-detail" style={{color: '#22c55e'}}>

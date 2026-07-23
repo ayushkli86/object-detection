@@ -37,6 +37,8 @@ export interface UseDetectorReturn {
   setActiveCamera: (id: string) => Promise<boolean>;
   availableCameras: CameraSource[];
   fetchCameras: () => Promise<CameraSource[]>;
+  updateFps: (fps: number) => void;
+  currentFps: number;
 }
 
 export function useDetector(): UseDetectorReturn {
@@ -51,6 +53,7 @@ export function useDetector(): UseDetectorReturn {
   const [connected, setConnected] = useState(false);
   const [activeCameraId, setActiveCameraId] = useState<string>('local');
   const [availableCameras, setAvailableCameras] = useState<CameraSource[]>([]);
+  const [currentFps, setCurrentFps] = useState(30);
 
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -124,14 +127,27 @@ export function useDetector(): UseDetectorReturn {
   }, []);
 
   // ── Local camera frame loop (optimized for FPS) ─────────────────────
-  const inFlightRef = useRef(false);  // throttle: skip if previous frame still in flight
+  const fpsRef = useRef(30);       // target FPS (can be updated via config)
+  const lastSendRef = useRef(0);   // timestamp of last frame send
+  const inFlightRef = useRef(false);
 
   const sendFrameLoop = useCallback(async () => {
     if (!detectingRef.current || activeCameraIdRef.current !== 'local') return;
-    if (inFlightRef.current) {  // don't pile up requests
+
+    // Time-based gate: only send if enough time has elapsed
+    const now = performance.now();
+    const minInterval = 1000 / fpsRef.current;
+    if (now - lastSendRef.current < minInterval) {
       frameTimerRef.current = requestAnimationFrame(sendFrameLoop);
       return;
     }
+
+    // Skip if previous frame is still in flight (backpressure)
+    if (inFlightRef.current) {
+      frameTimerRef.current = requestAnimationFrame(sendFrameLoop);
+      return;
+    }
+
     const video = videoRef.current;
     const canvas = captureCanvasRef.current;
     if (!video || !canvas) return;
@@ -142,7 +158,6 @@ export function useDetector(): UseDetectorReturn {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       // ── Lightweight 8-point hash (replaces full getImageData scan) ────
-      // Sample 8 pixels at fixed positions — fast, avoids main-thread stall
       const pts = [
         [0, 0], [canvas.width >> 1, 0], [canvas.width - 1, 0],
         [0, canvas.height - 1], [canvas.width - 1, canvas.height - 1],
@@ -162,6 +177,7 @@ export function useDetector(): UseDetectorReturn {
       prevFrameHashRef.current = hash;
 
       // ── Encode + send (fire-and-forget) ─────────────────────────────
+      lastSendRef.current = performance.now();
       const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
       inFlightRef.current = true;
       fetch(`${API_BASE}/detect`, {
@@ -184,6 +200,13 @@ export function useDetector(): UseDetectorReturn {
     if (detectingRef.current && activeCameraIdRef.current === 'local') {
       frameTimerRef.current = requestAnimationFrame(sendFrameLoop);
     }
+  }, []);
+
+  // Allow external FPS updates
+  const updateFps = useCallback((fps: number) => {
+    const clamped = Math.max(1, Math.min(120, fps));
+    fpsRef.current = clamped;
+    setCurrentFps(clamped);
   }, []);
 
   // ── Remote camera functions ──────────────────────────────────────────
@@ -342,11 +365,22 @@ export function useDetector(): UseDetectorReturn {
   useEffect(() => {
     const check = async () => {
       try {
-        const res = await fetch(`${API_BASE}/health`);
-        setConnected(res.ok);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.lan_ip) setLanIp(data.lan_ip);
+        const [healthRes, statsRes] = await Promise.all([
+          fetch(`${API_BASE}/health`),
+          fetch(`${API_BASE}/stats`),
+        ]);
+        const healthOk = healthRes.ok;
+        setConnected(healthOk);
+        if (healthOk) {
+          const healthData = await healthRes.json();
+          if (healthData.lan_ip) setLanIp(healthData.lan_ip);
+        }
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          if (statsData.max_fps) {
+            fpsRef.current = Math.max(1, Math.min(120, statsData.max_fps));
+            setCurrentFps(fpsRef.current);
+          }
         }
       } catch { setConnected(false); }
     };
@@ -375,5 +409,6 @@ export function useDetector(): UseDetectorReturn {
     detectionData, frameCanvas, remoteFrameUrl, lanIp,
     connected, fetchStats, fetchModels, switchModel,
     activeCameraId, setActiveCamera, availableCameras, fetchCameras,
+    updateFps, currentFps,
   };
 }

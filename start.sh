@@ -20,10 +20,11 @@ VENV_PIP="$VENV_DIR/bin/pip"
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8765}"
-MODEL_PATH="${MODEL_PATH:-$SCRIPT_DIR/models/yolov8l.pt}"
+MODEL_PATH="${MODEL_PATH:-$SCRIPT_DIR/models/besst.pt}"
 TRACKER="${TRACKER:-botsort}"
 IMGSZ="${IMGSZ:-640}"
 CLASS_FILTER="${CLASS_FILTER:-all}"
+DEVICE="${DEVICE:-cuda:0}"   # cuda:0, cuda:1, cpu, auto
 
 G='\033[0;32m' C='\033[0;36m' Y='\033[1;33m' R='\033[0;31m' B='\033[1m' NC='\033[0m'
 log()  { echo -e "${C}[INFO]${NC} $*"; }

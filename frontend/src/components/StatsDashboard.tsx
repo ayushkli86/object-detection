@@ -41,7 +41,7 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
     return `${sec}s`;
   }, [stats?.uptime_seconds]);
 
-  const modelName = stats?.model || detectionData?.model || 'yolov8l';
+  const modelName = stats?.model || detectionData?.model || 'besst';
 
   return (
     <div className="stats-dashboard">
@@ -122,10 +122,6 @@ const StatsDashboard: React.FC<Props> = ({ detectionData, fetchStats }) => {
           <div className="device-item">
             <span className="device-label">Confidence</span>
             <span className="device-value">{stats.conf_threshold.toFixed(2)}</span>
-          </div>
-          <div className="device-item">
-            <span className="device-label">Active Classes</span>
-            <span className="device-value">{stats.active_classes || 80}</span>
           </div>
           <div className="device-item">
             <span className="device-label">Input Size</span>

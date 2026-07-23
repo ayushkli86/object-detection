@@ -70,25 +70,26 @@ logger = logging.getLogger(__name__)
 _setup_cuda_library_path()
 
 COCO_CLASSES = [
-    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
-    'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
-    'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack',
-    'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
-    'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
-    'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
-    'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
-    'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
-    'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
-    'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',       # 0-8
+    'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',         # 9-15
+    'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe',                        # 16-23
+    'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard',          # 24-31
+    'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',             # 32-37
+    'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',              # 38-45
+    'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza',              # 46-53
+    'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet',            # 54-61
+    'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven',              # 62-69
+    'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'hair drier',          # 70-77
+    'toothbrush'                                                                                     # 78
 ]
 
-# Predefined class subsets for COCO model (used as fallback)
+ 
 CLASS_SUBSETS_COCO = {
-    "all": list(range(80)),
-    "traffic": [0, 1, 2, 3, 5, 6, 7, 9, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25],
-    "vehicles": [1, 2, 3, 5, 6, 7],
-    "people_animals": [0, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
-    "objects": [24, 25, 26, 27, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 71, 72, 73, 74, 75, 76, 77, 78, 79],
+    "all": list(range(79)),          # 0-78: all 79 COCO classes
+    "traffic": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],  # person, all vehicles, traffic infra
+    "vehicles": [1, 2, 3, 4, 5, 6, 7, 8],   # bicycle, car, motorcycle, airplane, bus, train, truck, boat
+    "people_animals": [0, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],  # person, bird-giraffe
+    "objects": list(range(24, 79)),   # backpack(24) through toothbrush(78)
 }
 
 
@@ -96,7 +97,7 @@ def build_class_subsets(class_names: Dict[int, str]) -> Dict[str, List[int]]:
     """Build class subsets dynamically based on the model's class names.
     
     This ensures subsets work correctly regardless of which model is loaded
-    (COCO 80 classes, Open Images 601 classes, etc.).
+ 
     """
     # Keywords that identify classes in each category
     traffic_kw = {
@@ -171,7 +172,7 @@ def build_class_subsets(class_names: Dict[int, str]) -> Dict[str, List[int]]:
 
 # Available model sizes (YOLOv8)
 AVAILABLE_MODELS = {
-    "yolov8l": {"file": "yolov8l.pt", "params": "43.7M", "map": 52.9, "speed_ms": 2.39},
+    "besst": {"file": "besst.pt", "params": "43.7M", "map": 52.9, "speed_ms": 2.39},
     "yolov8l-oiv7": {"file": "yolov8l-oiv7.pt", "params": "44.1M", "map": 34.9, "speed_ms": 2.43, "description": "601 classes (traffic + daily objects)", "finetuned": True},
 }
 
@@ -253,7 +254,7 @@ class DetectionFrame:
     inference_ms: float
     frame_width: int
     frame_height: int
-    model_name: str = "yolov8l"
+    model_name: str = "besst"
 
 
 @dataclass
@@ -292,7 +293,7 @@ class ObjectDetector:
 
     def __init__(
         self,
-        model_path: str = "yolov8l.pt",
+        model_path: str = "besst.pt",
         conf_threshold: float = 0.35,
         iou_threshold: float = 0.45,
         device: str = "cpu",
@@ -312,7 +313,7 @@ class ObjectDetector:
         # ── Class filtering ────────────────────────────────────────────
         self._class_subset_name = class_subset
         self._class_subsets = {}  # Built after model loads below
-        self._filtered_classes = list(range(80))  # temporary, rebuilt after model load
+        self._filtered_classes = list(range(79))  # temporary, rebuilt after model load
         logger.info(f"Class filter: {class_subset} ({len(self._filtered_classes)} classes)")
 
         # Resolve tracker config
@@ -335,7 +336,7 @@ class ObjectDetector:
         logger.info(f"Using device: {self.device}")
 
         # ── Load model ─────────────────────────────────────────────────
-        self.model_name = "yolov8l"
+        self.model_name = "besst"
         self._model_path = model_path
         logger.info(f"Loading YOLO model from {model_path}...")
         self.model = YOLO(model_path)
@@ -382,6 +383,18 @@ class ObjectDetector:
         # ── Track timestamps & frame counts ────────────────────────────
         self._track_first_seen: Dict[int, float] = {}
         self._track_frame_count: Dict[int, int] = defaultdict(int)
+
+        # ── Re-identification: lost-track buffer ───────────────────────
+        # Maps old tracker_id → metadata for recently disappeared tracks.
+        # When a new tracker_id appears, we check this buffer for a spatial
+        # match (IoU) to reassign the old ID instead of creating a duplicate.
+        self._lost_tracks: Dict[int, Dict[str, Any]] = {}
+        self._lost_track_max_age: float = 3.0  # seconds before purging
+
+        # ── Untracked-detection frame-to-frame matching ────────────────
+        # IoU-based matching prevents the same untracked person from being
+        # counted fresh every frame.
+        self._untracked_prev: List[Dict[str, Any]] = []
 
         # ── Detection history ring-buffer ──────────────────────────────
         self._history: collections.deque = collections.deque(maxlen=max_history)
@@ -465,6 +478,19 @@ class ObjectDetector:
 
     def clear_zones(self):
         self._zones.clear()
+
+    @staticmethod
+    def _compute_iou(box_a: List[float], box_b: List[float]) -> float:
+        """Compute IoU between two [x1, y1, x2, y2] boxes (normalized or pixel)."""
+        x1 = max(box_a[0], box_b[0])
+        y1 = max(box_a[1], box_b[1])
+        x2 = min(box_a[2], box_b[2])
+        y2 = min(box_a[3], box_b[3])
+        inter = max(0, x2 - x1) * max(0, y2 - y1)
+        area_a = max(0, box_a[2] - box_a[0]) * max(0, box_a[3] - box_a[1])
+        area_b = max(0, box_b[2] - box_b[0]) * max(0, box_b[3] - box_b[1])
+        union = area_a + area_b - inter
+        return inter / union if union > 0 else 0.0
 
     def _point_in_polygon(self, px: float, py: float, polygon: List[List[int]]) -> bool:
         """Ray-casting algorithm for point-in-polygon test."""
@@ -589,10 +615,13 @@ class ObjectDetector:
         frame_counts: Dict[str, int] = defaultdict(int)
         current_frame_ids: set = set()
         zones_active = len(self._zones) > 0 and any(z.enabled for z in self._zones)
+        now = time.time()
 
         if results and len(results) > 0:
             boxes = results[0].boxes
             if boxes is not None and len(boxes) > 0:
+                # ── Phase 1: Collect all raw detections from YOLO ──────
+                raw_detections: List[Dict[str, Any]] = []
                 for box in boxes:
                     try:
                         x1, y1, x2, y2 = box.xyxy[0].tolist()
@@ -600,87 +629,206 @@ class ObjectDetector:
                         class_id = int(box.cls[0])
                         class_name = self.classes.get(class_id, f"class_{class_id}")
 
-                        # ── Zone filtering ─────────────────────────
+                        # Zone filtering
                         center_x = (x1 + x2) / 2 / w
                         center_y = (y1 + y2) / 2 / h
                         zone_id = None
                         if zones_active:
                             zid = self._get_zone_for_point(center_x, center_y)
                             if zid == -1:
-                                continue  # Not in any zone → skip
+                                continue
                             zone_id = zid
 
-                        # Get tracker ID
                         tracker_id = None
                         if hasattr(box, 'id') and box.id is not None:
                             tracker_id = int(box.id[0])
 
-                        if tracker_id is not None:
-                            current_frame_ids.add(tracker_id)
-                            is_new_track = tracker_id not in self.known_tracks
-
-                            if not is_new_track:
-                                prev_class = self.known_tracks[tracker_id]
-                                if prev_class != class_name:
-                                    self.total_id_switches += 1
-                                    logger.info(
-                                        f"ID switch: track #{tracker_id} "
-                                        f"'{prev_class}' -> '{class_name}' "
-                                        f"(total: {self.total_id_switches})"
-                                    )
-                            else:
-                                self.total_tracks_created += 1
-
-                            self.known_tracks[tracker_id] = class_name
-                            self._track_frame_count[tracker_id] += 1
-
-                            # ── Bbox smoothing ──────────────────────
-                            raw_bbox = np.array([x1 / w, y1 / h, x2 / w, y2 / h])
-                            smoothed_bbox = self._get_smoothed_bbox(
-                                tracker_id, raw_bbox, w, h, class_name
-                            )
-                            smoothed_conf = self._smooth_confidence(tracker_id, raw_conf)
-
-                            detection = DetectionResult(
-                                class_id=class_id,
-                                class_name=class_name,
-                                confidence=smoothed_conf,
-                                bbox=smoothed_bbox,
-                                frame_center_x=center_x,
-                                frame_center_y=center_y,
-                                tracker_id=tracker_id,
-                                tracking_duration_frames=self._track_frame_count[tracker_id],
-                                first_seen_timestamp=self._track_first_seen.get(tracker_id, time.time()),
-                                zone_id=zone_id,
-                            )
-                            detections.append(detection)
-                            frame_counts[class_name] += 1
-
-                            if is_new_track:
-                                self.session_counts[class_name] += 1
-                                self.cumulative_counts[class_name] += 1
-
-                        else:
-                            detection = DetectionResult(
-                                class_id=class_id,
-                                class_name=class_name,
-                                confidence=raw_conf,
-                                bbox=[x1 / w, y1 / h, x2 / w, y2 / h],
-                                frame_center_x=center_x,
-                                frame_center_y=center_y,
-                                tracker_id=None,
-                                zone_id=zone_id,
-                            )
-                            detections.append(detection)
-                            frame_counts[class_name] += 1
-                            self.session_counts[class_name] += 1
-                            self.cumulative_counts[class_name] += 1
-
+                        raw_detections.append({
+                            'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+                            'raw_conf': raw_conf, 'class_id': class_id,
+                            'class_name': class_name, 'center_x': center_x,
+                            'center_y': center_y, 'zone_id': zone_id,
+                            'tracker_id': tracker_id,
+                            'norm_bbox': [x1 / w, y1 / h, x2 / w, y2 / h],
+                        })
                     except Exception as e:
                         logger.warning(f"Error processing detection: {e}")
                         continue
 
-        # ── Cleanup stale Kalman filters ──────────────────────────────
+                # ── Phase 2: Remember previous tracked IDs ────────────────
+                prev_tracked_ids = set(self.known_tracks.keys())
+
+                # ── Phase 3: Process tracked detections with re-ID ──────
+                used_lost_ids: set = set()  # lost-track IDs already re-assigned this frame
+
+                for rd in raw_detections:
+                    tracker_id = rd['tracker_id']
+
+                    if tracker_id is not None:
+                        current_frame_ids.add(tracker_id)
+                        is_new_track = tracker_id not in self.known_tracks
+
+                        # ── RE-IDENTIFICATION: check lost-track buffer ──
+                        if is_new_track:
+                            # Try to find a matching lost track of the same class
+                            best_lost_id = None
+                            best_iou = 0.0
+                            for lost_id, lost_info in self._lost_tracks.items():
+                                if lost_id in used_lost_ids:
+                                    continue
+                                if lost_info['class_name'] != rd['class_name']:
+                                    continue
+                                iou = self._compute_iou(rd['norm_bbox'], lost_info['bbox'])
+                                if iou > best_iou and iou >= 0.25:  # relaxed threshold for re-ID
+                                    best_iou = iou
+                                    best_lost_id = lost_id
+
+                            if best_lost_id is not None:
+                                # RE-IDENTIFIED: reuse old tracker_id
+                                old_id = best_lost_id
+                                lost_info = self._lost_tracks.pop(old_id)
+                                used_lost_ids.add(old_id)
+
+                                # Remove old Kalman filter so it re-initializes
+                                self._kalman_filters.pop(old_id, None)
+
+                                # Merge: keep the OLD tracker_id, restore metadata
+                                # The YOLO tracker gave us a new ID, but we override it
+                                # by removing the new ID from current_frame_ids and using old
+                                current_frame_ids.discard(tracker_id)
+                                current_frame_ids.add(old_id)
+                                rd['tracker_id'] = old_id
+                                tracker_id = old_id
+
+                                # Restore track metadata from lost buffer
+                                self.known_tracks[old_id] = rd['class_name']
+                                self._track_frame_count[old_id] = lost_info.get('track_frame_count', 0)
+                                self._track_first_seen[old_id] = lost_info.get('first_seen', now)
+
+                                logger.debug(
+                                    f"Re-identified track #{old_id} "
+                                    f"'{rd['class_name']}' (IoU={best_iou:.2f})"
+                                )
+                                is_new_track = False
+                            # else: genuinely new track, no match found
+                        # END re-identification
+
+                        if not is_new_track:
+                            prev_class = self.known_tracks[tracker_id]
+                            if prev_class != rd['class_name']:
+                                self.total_id_switches += 1
+                                logger.info(
+                                    f"ID switch: track #{tracker_id} "
+                                    f"'{prev_class}' -> '{rd['class_name']}' "
+                                    f"(total: {self.total_id_switches})"
+                                )
+                        else:
+                            self.total_tracks_created += 1
+
+                        self.known_tracks[tracker_id] = rd['class_name']
+                        self._track_frame_count[tracker_id] += 1
+
+                        # Bbox smoothing
+                        raw_bbox = np.array(rd['norm_bbox'])
+                        smoothed_bbox = self._get_smoothed_bbox(
+                            tracker_id, raw_bbox, w, h, rd['class_name']
+                        )
+                        smoothed_conf = self._smooth_confidence(tracker_id, rd['raw_conf'])
+
+                        detection = DetectionResult(
+                            class_id=rd['class_id'],
+                            class_name=rd['class_name'],
+                            confidence=smoothed_conf,
+                            bbox=smoothed_bbox,
+                            frame_center_x=rd['center_x'],
+                            frame_center_y=rd['center_y'],
+                            tracker_id=tracker_id,
+                            tracking_duration_frames=self._track_frame_count[tracker_id],
+                            first_seen_timestamp=self._track_first_seen.get(tracker_id, now),
+                            zone_id=rd['zone_id'],
+                        )
+                        detections.append(detection)
+                        frame_counts[rd['class_name']] += 1
+
+                        if is_new_track:
+                            self.session_counts[rd['class_name']] += 1
+                            self.cumulative_counts[rd['class_name']] += 1
+
+                # ── Phase 4: Moved-to-lost for tracks that disappeared ──
+                disappeared_ids = prev_tracked_ids - current_frame_ids
+                for old_id in disappeared_ids:
+                    if old_id in self.known_tracks:
+                        self._lost_tracks[old_id] = {
+                            'bbox': self._kalman_filters[old_id].get_bbox().tolist()
+                                    if old_id in self._kalman_filters else [0, 0, 0, 0],
+                            'class_name': self.known_tracks[old_id],
+                            'lost_at': now,
+                            'track_frame_count': self._track_frame_count.get(old_id, 0),
+                            'first_seen': self._track_first_seen.get(old_id, now),
+                        }
+
+                # ── Phase 5: Untracked detections with spatial matching ──
+                # Match untracked detections against previous frame's untracked
+                # to avoid counting the same person every frame.
+                current_untracked: List[Dict[str, Any]] = []
+                for rd in raw_detections:
+                    if rd['tracker_id'] is not None:
+                        continue  # already processed above
+
+                    matched_prev = False
+                    best_idx = -1
+                    best_iou = 0.0
+                    for pi, prev in enumerate(self._untracked_prev):
+                        if prev.get('consumed', False):
+                            continue
+                        if prev['class_name'] != rd['class_name']:
+                            continue
+                        iou = self._compute_iou(rd['norm_bbox'], prev['bbox'])
+                        if iou > best_iou and iou >= 0.3:
+                            best_iou = iou
+                            best_idx = pi
+
+                    if best_idx >= 0:
+                        # Same untracked object from previous frame — reuse
+                        self._untracked_prev[best_idx]['consumed'] = True
+                        matched_prev = True
+
+                    detection = DetectionResult(
+                        class_id=rd['class_id'],
+                        class_name=rd['class_name'],
+                        confidence=rd['raw_conf'],
+                        bbox=rd['norm_bbox'],
+                        frame_center_x=rd['center_x'],
+                        frame_center_y=rd['center_y'],
+                        tracker_id=None,
+                        zone_id=rd['zone_id'],
+                    )
+                    detections.append(detection)
+                    frame_counts[rd['class_name']] += 1
+
+                    current_untracked.append({
+                        'bbox': rd['norm_bbox'],
+                        'class_name': rd['class_name'],
+                        'consumed': False,
+                    })
+
+                    if not matched_prev:
+                        # Genuinely new untracked object — count it once
+                        self.session_counts[rd['class_name']] += 1
+                        self.cumulative_counts[rd['class_name']] += 1
+
+                self._untracked_prev = current_untracked
+
+        # ── Phase 6: Cleanup ─────────────────────────────────────────
+        # Purge stale lost tracks (>3s)
+        stale_lost = [
+            lid for lid, info in self._lost_tracks.items()
+            if now - info['lost_at'] > self._lost_track_max_age
+        ]
+        for lid in stale_lost:
+            del self._lost_tracks[lid]
+
+        # Cleanup stale Kalman filters
         self._cleanup_stale_filters(current_frame_ids)
 
         # Update FPS
@@ -760,6 +908,8 @@ class ObjectDetector:
         self._conf_history = defaultdict(lambda: collections.deque(maxlen=5))
         self._track_frame_count = defaultdict(int)
         self._track_first_seen = {}
+        self._lost_tracks = {}
+        self._untracked_prev = []
         self.total_tracks_created = 0
         self.total_id_switches = 0
         logger.info("Session counts, tracks, and stability metrics reset")

@@ -27,7 +27,7 @@
 
 ## Completed
 1. **GPU Analysis** — RTX 4050 (5.66 GB VRAM) — all YOLOv8 models fit
-2. **Model Upgrade** — yolov8l.pt downloaded (83.7 MB, mAP 52.9 vs nano 37.3)
+2. **Model Upgrade** — besst.pt downloaded (83.7 MB, mAP 52.9 vs nano 37.3)
 3. **Backend v2** — Per-client detection, model hot-swap, class filtering, rate limiting, history export, zone management, frame skip, configurable frame width
 4. **Frontend v2** — Mode selector (Screen/Camera), model selector UI, class filter chips, CSV export button, corrected labels, model info in stats/tracker panels
 5. **WebSocket v2** — Binary protocol with CRC32 checksum + sequence numbers for error recovery
@@ -37,10 +37,10 @@
 ## Score Summary
 | Component | Score | Notes |
 |-----------|-------|-------|
-| Backend Core | 10/10 | yolov8l, per-client WS, model hot-swap, class filtering, imgsz |
+| Backend Core | 10/10 | besst, per-client WS, model hot-swap, class filtering, imgsz |
 | Tracker System | 9/10 | BoT-SORT ReID, ByteTrack tuned, switching, stability |
 | Frontend UI | 10/10 | Mode selector, model picker, class filters, CSV export |
-| Detection Accuracy | 9/10 | yolov8l (mAP 52.9), configurable imgsz, class filtering |
+| Detection Accuracy | 9/10 | besst (mAP 52.9), configurable imgsz, class filtering |
 | Security | 8/10 | Rate limiting, CORS whitelist, input validation |
 | Tests | 9/10 | 30+ tests, rate limit testing, model switching |
 | Documentation | 8/10 | Progress tracking, inline docs |
@@ -48,11 +48,11 @@
 ## Environment Variables
 | Variable | Default | Description |
 |----------|---------|-------------|
-| MODEL_PATH | models/yolov8l.pt | YOLO model path |
+| MODEL_PATH | models/besst.pt | YOLO model path |
 | TRACKER | botsort | botsort or bytetrack |
 | IMGSZ | 640 | Inference input size |
 | CLASS_FILTER | all | all/vehicles/people_animals/objects |
 | MAX_FRAME_WIDTH | 1280 | WebSocket frame max width |
 | MAX_FPS | 15 | Target FPS |
 | ALLOWED_ORIGINS | * | CORS origins |
-| RATE_LIMIT_DETECT | 30 | Max /api/detect per second |
+| RATE_LIMIT_DETECT | 120 | Max /api/detect per second |

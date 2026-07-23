@@ -6,12 +6,14 @@ interface Props {
   detecting: boolean;
   onStart: () => void;
   onStop: () => void;
-  onConfig: (conf: { conf?: number; iou?: number; model?: string; class_filter?: string; imgsz?: number }) => void;
+  onConfig: (conf: { conf?: number; iou?: number; model?: string; class_filter?: string; imgsz?: number; max_fps?: number }) => void;
   onReset: () => void;
   onExport: () => void;
   currentConf: number;
   modelsData: ModelsResponse | null;
   onModelSwitch: (model: string) => Promise<boolean>;
+  currentFps: number;
+  onFpsChange: (fps: number) => void;
 }
 
 const CLASS_FILTERS = [
@@ -23,10 +25,10 @@ const CLASS_FILTERS = [
 
 const ControlPanel: React.FC<Props> = ({
   connected, detecting, onStart, onStop, onConfig, onReset, onExport,
-  currentConf, modelsData, onModelSwitch,
+  currentConf, modelsData, onModelSwitch, currentFps, onFpsChange,
 }) => {
   const [confThresh, setConfThresh] = useState(currentConf);
-  const [selectedModel, setSelectedModel] = useState(modelsData?.current || 'yolov8l');
+  const [selectedModel, setSelectedModel] = useState(modelsData?.current || 'besst');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -51,7 +53,7 @@ const ControlPanel: React.FC<Props> = ({
     setSwitching(true);
     setSelectedModel(modelName);
     const ok = await onModelSwitch(modelName);
-    if (!ok) setSelectedModel(modelsData?.current || 'yolov8l');
+    if (!ok) setSelectedModel(modelsData?.current || 'besst');
     setSwitching(false);
     switchingRef.current = false;
   };
@@ -158,19 +160,18 @@ const ControlPanel: React.FC<Props> = ({
             <div className="control-group">
               <label className="control-label">
                 Target FPS
-                <span className="control-value">15</span>
+                <span className="control-value">{currentFps}</span>
               </label>
               <input
-                type="range" min="1" max="30" step="1" defaultValue="15"
+                type="range" min="1" max="120" step="1" value={currentFps}
                 className="slider"
                 onChange={(e) => {
-                  fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ max_fps: parseInt(e.target.value, 10) }),
-                  }).catch(() => {});
+                  const fps = parseInt(e.target.value, 10);
+                  onConfig({ max_fps: fps });
+                  onFpsChange(fps);
                 }}
               />
+              <div className="slider-labels"><span>1 FPS (low CPU)</span><span>120 FPS (GPU)</span></div>
             </div>
 
             <button className="btn btn-warning btn-sm" onClick={onReset}>
